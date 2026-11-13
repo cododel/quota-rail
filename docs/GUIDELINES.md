@@ -65,7 +65,7 @@ copying tokens into this document. The following safeguards protect those intera
 
 ## Application lifecycle and distribution
 
-- Keep bundle identity `com.cododel.quota-rail` stable. Bundle helpers and assets in the
+- Keep bundle identity `com.cododel.quota-rail` stable. Bundle assets in the
   `.app` and resolve source-development resources from the checkout beside the executable.
 - On the first eligible release launch, register for Open at Login. Do not re-enable it
   after the user disables it. Failed registration must remain diagnosable and retryable;

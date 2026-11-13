@@ -79,7 +79,7 @@ bun run watch-preview
 The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data. In the terminal, press `d` to switch between live and demo quotas, `r` to restart the last successful build, or `s` to suspend and resume the preview. Swift edits made while suspended are rebuilt on resume.
 
 Application code lives in `Sources/App/`, overlay views and geometry in
-`Sources/Overlay/`, and provider adapters and their Python helpers in `Sources/Providers/`. Build and preview scripts live in `scripts/`.
+`Sources/Overlay/`, and provider adapters in `Sources/Providers/`. Build and preview scripts live in `scripts/`.
 
 To build once:
 
@@ -90,7 +90,7 @@ xcrun --sdk macosx swiftc -O -parse-as-library \
 ./quota-rail
 ```
 
-Source builds load provider scripts from `Sources/Providers/` and images from `assets/` next to the executable. The Claude and Antigravity helpers use `/usr/bin/python3`. Source builds and untagged CI builds omit the updater.
+Source builds load images from `assets/` next to the executable. The app and quota providers use Swift. Source builds and untagged CI builds omit the updater.
 
 For release setup, create a public prerelease tagged `update-feed` and keep its assets mutable. Set the repository variable `SPARKLE_PUBLIC_KEY` and the matching `SPARKLE_PRIVATE_KEY` secret using Sparkle's exported 32-byte seed format. Keep a backup of the private key outside Git. GitHub Actions publishes the ZIP from a stable `vX.Y.Z` tag, verifies the public download, then replaces the signed appcast on `update-feed`. If the ZIP was published but the feed step failed, rerun the macOS workflow with that tag as `release_tag`.
 

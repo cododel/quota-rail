@@ -57,7 +57,6 @@ fi
 xcrun --sdk macosx swiftc -O -parse-as-library \
   -target arm64-apple-macosx14.0 -module-cache-path cache \
   ${swift_flags[@]+"${swift_flags[@]}"} Sources/*/*.swift -o "$contents/MacOS/$executable"
-cp Sources/Providers/agy-quota.py Sources/Providers/claude-quota.py "$resources/"
 mkdir -p "$resources/assets"
 cp assets/{claude.png,antigravity.png,grok.svg,opencode.svg,kimi.svg,gpt.png} "$resources/assets/"
 cp assets/QuotaRail.icns "$resources/QuotaRail.icns"

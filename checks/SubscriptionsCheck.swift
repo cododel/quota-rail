@@ -4,6 +4,14 @@ import SwiftUI
 @main
 struct SubscriptionsCheck {
     static func main() {
+        AntigravityQuota.handleStatusLineCallback()
+        let arguments = CommandLine.arguments
+        if arguments.count == 4, arguments[1] == "--check-antigravity-fixture",
+           let timeout = Double(arguments[3]) {
+            guard let quota = AntigravityQuota.read(executable: arguments[2], timeout: timeout) else { exit(1) }
+            print(quota.gemini.remaining, quota.thirdParty.remaining)
+            return
+        }
         let visibleOrder = OverlaySubscription.moving("grok", to: 0, in: ["codex", "gemini", "grok"])
         precondition(visibleOrder == ["grok", "codex", "gemini"])
         precondition(OverlaySubscription.moving("grok", to: 2, in: visibleOrder) == ["codex", "gemini", "grok"])

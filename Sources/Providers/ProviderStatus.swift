@@ -38,12 +38,15 @@ struct ProviderStatus: Sendable {
 
     init(_ name: String, executable: String, extraPaths: [String] = []) {
         self.name = name
+        cliInstalled = Self.executablePath(executable, extraPaths: extraPaths) != nil
+    }
+
+    static func executablePath(_ executable: String, extraPaths: [String] = []) -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let paths = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
             + extraPaths + [home.appendingPathComponent(".local/bin").path, "/opt/homebrew/bin", "/usr/local/bin"]
-        cliInstalled = paths.contains {
-            $0.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: $0 + "/" + executable)
-        }
+        return paths.filter { $0.hasPrefix("/") }.map { $0 + "/" + executable }
+            .first(where: FileManager.default.isExecutableFile(atPath:))
     }
 
     static func read<Quota>(_ name: String, executable: String, extraPaths: [String] = [],

@@ -687,7 +687,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                         await ProviderStatus.read("Antigravity", executable: "agy") { _ in AntigravityQuota.read() }
                     }.value
                     async let claude = Task.detached(priority: .utility) {
-                        await ProviderStatus.read("Claude", executable: "claude") { ClaudeQuota.read(status: &$0) }
+                        await ProviderStatus.read("Claude", executable: "claude") { await ClaudeQuota.read(status: &$0) }
                     }.value
                     async let grok = ProviderStatus.read("Grok Build", executable: "grok") { await GrokQuota.read(status: &$0) }
                     async let openCodeGo = ProviderStatus.read("OpenCode Go", executable: "opencode") { await OpenCodeGoQuota.read(status: &$0) }
@@ -737,6 +737,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
 enum QuotaRailApp {
     @MainActor
     static func main() {
+        AntigravityQuota.handleStatusLineCallback()
         if CommandLine.arguments.contains("--export-contour") {
             print(OverlayGeometry.drawing())
             return
