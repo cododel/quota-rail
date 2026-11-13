@@ -49,5 +49,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          release_flags=()
+          if [[ "$GITHUB_REF_NAME" == v0.0.1 ]]; then
+            release_flags+=(--prerelease --title "v0.0.1 (Pre-alpha)")
+          fi
           gh release create "$GITHUB_REF_NAME" quota-rail-macos-arm64.zip \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes "${release_flags[@]}"

@@ -9,6 +9,7 @@ final class ReleaseUpdates: ObservableObject {
             let browser_download_url: URL
         }
 
+        let draft: Bool
         let tag_name: String
         let assets: [Asset]
     }
@@ -30,7 +31,7 @@ final class ReleaseUpdates: ObservableObject {
         download = nil
 
         do {
-            var request = URLRequest(url: URL(string: "https://api.github.com/repos/cododel/quota-rail/releases/latest")!)
+            var request = URLRequest(url: URL(string: "https://api.github.com/repos/cododel/quota-rail/releases?per_page=100")!)
             request.timeoutInterval = 15
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -40,11 +41,18 @@ final class ReleaseUpdates: ObservableObject {
                 return
             }
             guard status == 200 else { throw URLError(.badServerResponse) }
-            let release = try JSONDecoder().decode(Release.self, from: data)
-            guard let latest = Self.versionParts(String(release.tag_name.dropFirst())),
-                  release.tag_name.hasPrefix("v"),
-                  let current = Self.versionParts(currentVersion) else {
+            let releases = try JSONDecoder().decode([Release].self, from: data)
+            guard let current = Self.versionParts(currentVersion) else {
                 throw URLError(.cannotParseResponse)
+            }
+            let candidates = releases.compactMap { release -> (Release, [Int])? in
+                guard !release.draft, release.tag_name.hasPrefix("v"),
+                      let version = Self.versionParts(String(release.tag_name.dropFirst())) else { return nil }
+                return (release, version)
+            }
+            guard let (release, latest) = candidates.max(by: { $0.1.lexicographicallyPrecedes($1.1) }) else {
+                message = "No published release yet."
+                return
             }
             guard current.lexicographicallyPrecedes(latest) else {
                 message = "Quota Rail is up to date."

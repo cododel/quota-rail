@@ -22,7 +22,7 @@ publishes it on GitHub Releases.
 Download `quota-rail-macos-arm64.zip`, extract the folder, and run
 `./projector-overlay` from that folder. The archive is not notarized.
 
-Quota Rail checks the latest stable GitHub release at startup. The settings
+Quota Rail checks the latest published GitHub release, including pre-releases at startup. The settings
 popover also has **Check for Updates**. When a newer archive is available,
 **Download Update** opens the download in your browser. Quit the old overlay,
 extract the archive, and launch the new executable from the extracted folder.
