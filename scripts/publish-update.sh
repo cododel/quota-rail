@@ -42,12 +42,36 @@ if ! gh release upload update-feed "$directory/appcast.xml" --repo "$repo" --clo
   fi
   exit 1
 fi
-for attempt in 1 2 3 4 5; do
-  if curl -fsSL --max-time 30 "$feed_url" -o "$stage/published.xml" &&
-     cmp -s "$stage/published.xml" "$directory/appcast.xml"; then
-    exit 0
+max_attempts=13
+for ((attempt=1; attempt<=max_attempts; attempt++)); do
+  if curl -fsSL --max-time 10 "$feed_url" -o "$stage/published.xml"; then
+    versions=$(python3 - "$stage/published.xml" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+try:
+    nodes = ET.parse(sys.argv[1]).findall(
+        "./channel/item/{http://www.andymatuschak.org/xml-namespaces/sparkle}version"
+    )
+    versions = [node.text for node in nodes if re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", node.text or "")]
+    print(", ".join(versions) or "no readable Sparkle version")
+except ET.ParseError:
+    print("invalid XML")
+PY
+)
+    echo "Appcast attempt $attempt/$max_attempts: expected ${tag#v}, received $versions."
+    if cmp -s "$stage/published.xml" "$directory/appcast.xml"; then
+      echo "Public appcast matches the signed file."
+      exit 0
+    fi
+    echo "Public appcast differs from the signed file."
+  else
+    echo "Appcast attempt $attempt/$max_attempts: download failed (expected ${tag#v})."
   fi
-  sleep 3
+  if (( attempt < max_attempts )); then
+    sleep 10
+  fi
 done
 echo "Published feed could not be verified. Retry publication for $tag." >&2
 exit 1
