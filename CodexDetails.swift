@@ -27,21 +27,42 @@ struct CodexDetails: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func windowRows(_ windows: [CodexQuota.LimitWindow]) -> some View {
+    private func resetCountdown(_ reset: Date, now: Date) -> String {
+        let seconds = reset.timeIntervalSince(now)
+        guard seconds > 0 else { return "Awaiting refresh" }
+        if seconds < 60 { return "Resets in <1m" }
+        guard let minutes = Int(exactly: (seconds / 60).rounded(.down)) else {
+            return "Reset time unavailable"
+        }
+        let days = minutes / 1_440
+        let hours = minutes / 60
+        if days > 0 { return "Resets in \(days)d \(hours % 24)h" }
+        if hours > 0 { return "Resets in \(hours)h \(minutes % 60)m" }
+        return "Resets in \(minutes)m"
+    }
+
+    private func windowRows(_ windows: [CodexQuota.LimitWindow], now: Date) -> some View {
         ForEach(windows) { window in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(window.label).foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(window.remaining)% remaining").monospacedDigit()
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(window.label).foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(window.remaining)% remaining").monospacedDigit()
+                }
+                if let reset = window.reset {
+                    HStack(spacing: 8) {
+                        Text(resetCountdown(reset, now: now))
+                            .minimumScaleFactor(0.85)
+                        Spacer(minLength: 0)
+                        Text(dateLabel(reset))
+                            .minimumScaleFactor(0.85)
                     }
-                    if let reset = window.reset {
-                        Text("Resets \(dateLabel(reset))")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
+                    .lineLimit(1)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.secondary)
                 }
             }
+        }
     }
 
     var body: some View {
@@ -52,13 +73,17 @@ struct CodexDetails: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            if limitGroups.isEmpty {
-                windowRows(quota.windows)
-            } else {
-                ForEach(limitGroups) { group in
-                    Divider()
-                    Text(group.name).fontWeight(.medium)
-                    windowRows(group.windows)
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                VStack(alignment: .leading, spacing: 8) {
+                    if limitGroups.isEmpty {
+                        windowRows(quota.windows, now: context.date)
+                    } else {
+                        ForEach(limitGroups) { group in
+                            Divider()
+                            Text(group.name).fontWeight(.medium)
+                            windowRows(group.windows, now: context.date)
+                        }
+                    }
                 }
             }
             if quota.unlimitedUsageCredits || quota.usageCreditBalance != nil {

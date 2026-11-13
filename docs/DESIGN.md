@@ -275,7 +275,10 @@ Reading order:
 
 1. Provider name.
 2. Available quota windows: compact window label at left, remaining value at right,
-   subdued reset date directly below. Antigravity has Gemini and Claude/GPT sections.
+   subdued countdown at left and exact reset date at right on the line below.
+   Use at most two time units. Refresh the countdown every minute while details are
+   open. Show **Awaiting refresh** once the reported reset time has passed.
+   Antigravity has Gemini and Claude/GPT sections.
 3. Credits, only when supplied: rounded displayed balance, approximate dollar estimate
    as a secondary line. Never imply the estimate is a guaranteed cash balance.
 4. Banked resets, only when supplied: count, then a compact expiration list with date
