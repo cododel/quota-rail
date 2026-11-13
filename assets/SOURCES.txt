@@ -4,3 +4,5 @@ Gemini outline — https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d473
 GPT monochrome mark — installed ChatGPT app, chatgptTemplate.png
 Antigravity mark — https://antigravity.google/favicon.ico (from CanvasTTY assets, converted to PNG; rendered as monochrome template)
 Grok mark — https://github.com/lobehub/lobe-icons (icons-static-svg/grok.svg, explicit dimensions and white fill for the overlay)
+OpenCode mark — https://opencode.ai/brand/files/opencode-logo-transparent-dark.svg
+Kimi mark — https://github.com/simple-icons/simple-icons/blob/develop/icons/kimi.svg (white fill and explicit dimensions for the overlay)

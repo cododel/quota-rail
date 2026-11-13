@@ -14,7 +14,7 @@ struct OverlaySubscription: Identifiable {
         let windows: [CodexQuota.LimitWindow]
     }
 
-    static func resolve(codex: CodexQuota?, antigravity: AntigravityQuota? = nil, claude: CodexQuota? = nil, grok: CodexQuota? = nil, includeMocks: Bool = true, fullDemo: Bool = false, now: Date) -> [Self] {
+    static func resolve(codex: CodexQuota?, antigravity: AntigravityQuota? = nil, claude: CodexQuota? = nil, grok: CodexQuota? = nil, openCodeGo: CodexQuota? = nil, kimi: CodexQuota? = nil, includeMocks: Bool = true, fullDemo: Bool = false, now: Date) -> [Self] {
         var live: [String: Self] = [:]
         if !fullDemo {
             if let claude {
@@ -31,11 +31,13 @@ struct OverlaySubscription: Identifiable {
                     ])
             }
         }
-        let grokSubscription = fullDemo ? nil : grok.map {
-            Self(id: "grok", name: "Grok Build", color: .cyan, quota: $0, isMock: false)
-        }
+        let extraSubscriptions = fullDemo ? [] : [
+            grok.map { Self(id: "grok", name: "Grok Build", color: .cyan, quota: $0, isMock: false) },
+            openCodeGo.map { Self(id: "opencode-go", name: "OpenCode Go", color: .purple, quota: $0, isMock: false) },
+            kimi.map { Self(id: "kimi", name: "Kimi", color: .blue, quota: $0, isMock: false) }
+        ].compactMap { $0 }
         if !includeMocks && !fullDemo {
-            return ["claude", "codex", "gemini"].compactMap { live[$0] } + [grokSubscription].compactMap { $0 }
+            return ["claude", "codex", "gemini"].compactMap { live[$0] } + extraSubscriptions
         }
         let examples: [(String, String, Color, Int, Int, Int, [Int])] = [
             ("claude", "Claude", .orange, 73, 300, 2_450, [2]),
@@ -76,6 +78,6 @@ struct OverlaySubscription: Identifiable {
             ] : []
             return Self(id: id, name: name, color: color, quota: quota, isMock: true, limitGroups: groups)
         }
-        return subscriptions + [grokSubscription].compactMap { $0 }
+        return subscriptions + extraSubscriptions
     }
 }

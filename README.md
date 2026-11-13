@@ -26,6 +26,8 @@ The app is distributed without Apple notarization, so macOS may show a Gatekeepe
 | Claude Code | 5-hour and weekly quotas, when reported |
 | Antigravity | 5-hour and weekly quotas for Gemini and Claude/GPT |
 | Grok Build | Shared weekly quota and reset time |
+| OpenCode Go | 5-hour, weekly, and monthly quotas when reported |
+| Kimi | Quota windows and reset times from the signed-in Kimi CLI |
 
 Check the release notes for what ships in each download.
 

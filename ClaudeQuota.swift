@@ -22,12 +22,12 @@ struct ClaudeQuota {
                           unlimitedUsageCredits: false, additionalWindows: Array(windows.dropFirst()))
     }
 
-    static func read() -> CodexQuota? {
+    static func read(status: inout ProviderStatus) -> CodexQuota? {
         let helper = AppResources.directory.appendingPathComponent("claude-quota.py")
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [helper.path]
+        process.arguments = [helper.path, "--status"]
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
@@ -35,6 +35,11 @@ struct ClaudeQuota {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         guard process.terminationStatus == 0, data.count <= 65_536 else { return nil }
-        return parse(data)
+        guard let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        if let authorization = result["authorization"] as? String { status.authorization = authorization }
+        if let subscription = result["subscription"] as? String { status.subscription = subscription.capitalized }
+        guard let quota = result["quota"], let payload = try? JSONSerialization.data(withJSONObject: quota)
+        else { return nil }
+        return parse(payload)
     }
 }

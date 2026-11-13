@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum OverlayGeometry {
+    static let panelHeight: CGFloat = 440
     static let width: CGFloat = 40
     static let bodyHeight: CGFloat = 188
     static let settingsDiameter: CGFloat = 26

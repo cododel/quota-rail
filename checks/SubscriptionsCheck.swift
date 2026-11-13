@@ -83,6 +83,45 @@ struct SubscriptionsCheck {
         precondition(GrokQuota.parse(grokPayload, now: now.addingTimeInterval(604_800)) == nil)
         let withGrok = OverlaySubscription.resolve(codex: live, antigravity: agy, claude: claudeLive, grok: grok, now: now)
         precondition(withGrok.map(\.id) == ["claude", "codex", "gemini", "grok"])
+        let goPayload = Data("""
+            {"usage":{"rolling":{"percent":25,"resetsAt":1800003600000},
+            "weekly":{"percent":"60","resetsAt":1800086400},"monthly":{"percent":90}}}
+            """.utf8)
+        let go = OpenCodeGoQuota.parse(goPayload, now: now)!
+        precondition(go.windows.map(\.label) == ["5h", "7d", "Monthly"])
+        precondition(go.windows.map(\.remaining) == [75, 40, 10])
+        precondition(go.windows[0].reset == now.addingTimeInterval(3_600))
+        let monthlyOnly = OpenCodeGoQuota.parse(goPayload, now: now.addingTimeInterval(86_400))
+        precondition(monthlyOnly?.windows.map(\.label) == ["Monthly"])
+        let withGo = OverlaySubscription.resolve(codex: live, openCodeGo: go, includeMocks: false, now: now)
+        precondition(withGo.map(\.id) == ["codex", "opencode-go"])
+        let kimiPayload = Data("""
+            {"data":{"usage":{"limit":"100","used":30,"resetTime":1800086400},
+            "limits":[{"window":{"duration":5,"timeUnit":"TIME_UNIT_HOUR"},
+            "detail":{"limit":100,"remaining":80,"resetTime":1800003600000}}]}}
+            """.utf8)
+        let kimi = KimiQuota.parse(kimiPayload, now: now)!
+        precondition(kimi.windows.map(\.label) == ["7d", "5h"])
+        precondition(kimi.windows.map(\.remaining) == [70, 80])
+        precondition(kimi.windows.last?.reset == now.addingTimeInterval(3_600))
+        let kimiModern = Data("""
+            {"data":{"kind":"ok","quota":{"usages":{
+              "limit5h":{"usedRatio":0,"resetAt":"2027-01-20T14:15:30.192Z"},
+              "limit7d":{"usedRatio":0.25},"monthTotal":{"usedRatio":0.5},"monthCode":{"usedRatio":1}
+            },"extraUsage":null}}}
+            """.utf8)
+        let modernWindows = KimiQuota.parse(kimiModern, now: now)?.windows
+        precondition(modernWindows?.map(\.label) == ["5h", "7d", "Monthly", "Monthly code"])
+        precondition(modernWindows?.map(\.remaining) == [100, 75, 50, 0])
+        precondition(modernWindows?.first?.reset != nil)
+        let kimiEmpty = Data(#"{"data":{"kind":"ok","quota":{"usages":{},"extraUsage":null}}}"#.utf8)
+        precondition(KimiQuota.parse(kimiEmpty, now: now) == nil)
+        let kimiSummary = Data("""
+            {"summary":{"window":{"duration":7,"unit":"day"},"limit":100,"used":42}}
+            """.utf8)
+        precondition(KimiQuota.parse(kimiSummary, now: now)?.remaining == 58)
+        precondition(KimiQuota.parse(Data(#"{"data":{"kind":"error"}}"#.utf8), now: now) == nil)
+        precondition(OverlaySubscription.resolve(codex: nil, kimi: kimi, includeMocks: false, now: now).map(\.id) == ["kimi"])
         print("PASS: Antigravity parsing, invalid/expired data, per-provider fallback, forced demo")
         print("PASS: both quota windows, percentages, Claude mock and single banked reset")
         print("PASS: flag off, live quota preservation, two-mock fill, three-mock fallback")

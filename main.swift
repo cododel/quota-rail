@@ -7,6 +7,8 @@ enum HarnessImages {
     static let claude = NSImage(contentsOf: directory.appendingPathComponent("claude.png"))
     static let antigravity = NSImage(contentsOf: directory.appendingPathComponent("antigravity.png"))
     static let grok = NSImage(contentsOf: directory.appendingPathComponent("grok.svg"))
+    static let openCode = NSImage(contentsOf: directory.appendingPathComponent("opencode.svg"))
+    static let kimi = NSImage(contentsOf: directory.appendingPathComponent("kimi.svg"))
     static let gpt = NSImage(contentsOf: directory.appendingPathComponent("gpt.png"))
 }
 
@@ -155,6 +157,9 @@ final class OverlayState: ObservableObject {
     @Published var hasScreenAccess = CGPreflightScreenCaptureAccess()
     @Published var selectedSubscription: String?
     @Published var claudeQuota: CodexQuota?
+    @Published var providerStatuses: [ProviderStatus] = []
+    @Published var kimiQuota: CodexQuota?
+    @Published var openCodeGoQuota: CodexQuota?
     @Published var grokQuota: CodexQuota?
     @Published var antigravityQuota: AntigravityQuota?
     @Published var fullDemo = CommandLine.arguments.contains("--full-demo")
@@ -190,7 +195,7 @@ final class OverlayState: ObservableObject {
     }
 
     var subscriptions: [OverlaySubscription] {
-        OverlaySubscription.resolve(codex: codexQuota, antigravity: antigravityQuota, claude: claudeQuota, grok: grokQuota, fullDemo: fullDemo, now: demoStart)
+        OverlaySubscription.resolve(codex: codexQuota, antigravity: antigravityQuota, claude: claudeQuota, grok: grokQuota, openCodeGo: openCodeGoQuota, kimi: kimiQuota, fullDemo: fullDemo, now: demoStart)
     }
     var settingsAtMouseDown: Bool?
     @Published var pinned = false
@@ -208,7 +213,7 @@ struct Overlay: View {
     private let openSpring = Animation.spring(response: 0.38, dampingFraction: 0.9, blendDuration: 0)
     private let closeSpring = Animation.spring(response: 0.34, dampingFraction: 1.0, blendDuration: 0)
 
-    private var extraHeight: CGFloat { state.visibleSubscriptions.count > 3 ? 54 : 0 }
+    private var extraHeight: CGFloat { CGFloat(max(0, state.visibleSubscriptions.count - 3)) * 54 }
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -298,7 +303,7 @@ struct Overlay: View {
                 }
         }
         .foregroundStyle(.white)
-        .frame(width: 48, height: 328, alignment: .trailing)
+        .frame(width: 48, height: OverlayGeometry.panelHeight, alignment: .trailing)
         .clipped()
         .contentShape(HoverRegion(expanded: state.expanded))
         .onHover(perform: hoverChanged)
@@ -353,7 +358,8 @@ struct Overlay: View {
     }
 
     private func meter(_ percent: Int, color: Color, provider: String, mark: String) -> some View {
-        VStack(spacing: 4) {
+        let logoSize: CGFloat = mark == "kimi" || mark == "opencode-go" ? 11 : 14
+        return VStack(spacing: 4) {
             ZStack {
                 Circle().stroke(.white.opacity(0.18), lineWidth: 2)
                 Circle().trim(from: 0, to: CGFloat(percent) / 100)
@@ -361,16 +367,21 @@ struct Overlay: View {
                     .rotationEffect(.degrees(-90))
                 Group {
                     let image = switch mark {
+                    case "kimi": HarnessImages.kimi
+                    case "opencode-go": HarnessImages.openCode
                     case "grok": HarnessImages.grok
                     case "gemini": HarnessImages.antigravity
                     case "claude": HarnessImages.claude
                     default: HarnessImages.gpt
                     }
                     if let image {
-                        Image(nsImage: image).resizable().renderingMode(.template).aspectRatio(contentMode: .fit)
+                        Image(nsImage: image)
+                            .resizable()
+                            .renderingMode(mark == "opencode-go" ? .original : .template)
+                            .aspectRatio(contentMode: .fit)
                     }
                 }
-                .frame(width: 14, height: 14)
+                .frame(width: logoSize, height: logoSize)
             }
             .frame(width: 26, height: 26)
             Text("\(percent)%")
@@ -416,7 +427,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         guard let screen = NSScreen.main else { return }
         let bounds = screen.frame
         let panel = NSPanel(
-            contentRect: NSRect(x: bounds.maxX - 48, y: bounds.midY - 164, width: 48, height: 328),
+            contentRect: NSRect(x: bounds.maxX - 48, y: bounds.midY - OverlayGeometry.panelHeight / 2, width: 48, height: OverlayGeometry.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -456,11 +467,28 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         quotaTask = Task { [state] in
             while !Task.isCancelled {
                 if !state.fullDemo && Date() >= state.nextQuotaRefresh {
-                    async let codex = Task.detached(priority: .utility) { CodexQuota.read() }.value
-                    async let antigravity = Task.detached(priority: .utility) { AntigravityQuota.read() }.value
-                    async let claude = Task.detached(priority: .utility) { ClaudeQuota.read() }.value
-                    async let grok = GrokQuota.read()
-                    let (codexResult, antigravityResult, claudeResult, grokResult) = await (codex, antigravity, claude, grok)
+                    async let codex = Task.detached(priority: .utility) {
+                        var status = ProviderStatus("Codex", executable: "codex")
+                        let result = CodexQuota.read(status: &status)
+                        status.quotaAvailable = (try? result.get()) != nil
+                        return (result, status)
+                    }.value
+                    async let antigravity = Task.detached(priority: .utility) {
+                        await ProviderStatus.read("Antigravity", executable: "agy") { _ in AntigravityQuota.read() }
+                    }.value
+                    async let claude = Task.detached(priority: .utility) {
+                        await ProviderStatus.read("Claude", executable: "claude") { ClaudeQuota.read(status: &$0) }
+                    }.value
+                    async let grok = ProviderStatus.read("Grok Build", executable: "grok") { await GrokQuota.read(status: &$0) }
+                    async let openCodeGo = ProviderStatus.read("OpenCode Go", executable: "opencode") { await OpenCodeGoQuota.read(status: &$0) }
+                    let kimiBin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".kimi-code/bin").path
+                    async let kimi = ProviderStatus.read("Kimi", executable: "kimi", extraPaths: [kimiBin]) {
+                        await KimiQuota.read(status: &$0)
+                    }
+                    let ((codexResult, codexStatus), (antigravityResult, antigravityStatus),
+                         (claudeResult, claudeStatus), (grokResult, grokStatus),
+                         (openCodeGoResult, openCodeGoStatus), (kimiResult, kimiStatus)) =
+                        await (codex, antigravity, claude, grok, openCodeGo, kimi)
                     guard !Task.isCancelled else { return }
                     if !state.fullDemo {
                         switch codexResult {
@@ -474,6 +502,10 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                         state.antigravityQuota = antigravityResult
                         state.claudeQuota = claudeResult
                         state.grokQuota = grokResult
+                        state.openCodeGoQuota = openCodeGoResult
+                        state.kimiQuota = kimiResult
+                        state.providerStatuses = [claudeStatus, codexStatus, antigravityStatus,
+                                                  grokStatus, openCodeGoStatus, kimiStatus]
                         state.nextQuotaRefresh = Date().addingTimeInterval(60)
                     }
                 }
@@ -520,7 +552,8 @@ enum OverlayDemo {
             return
         }
         if CommandLine.arguments.contains("--check-codex-quota") {
-            switch CodexQuota.read() {
+            var status = ProviderStatus("Codex", executable: "codex")
+            switch CodexQuota.read(status: &status) {
             case .success(let quota):
                 print("\(quota.label) · \(quota.remaining)% remaining")
                 if let label = quota.usageCreditLabel { print(label) }

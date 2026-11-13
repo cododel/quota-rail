@@ -48,7 +48,7 @@ enum GrokQuota {
         }
     }
 
-    static func read() async -> CodexQuota? {
+    static func read(status: inout ProviderStatus) async -> CodexQuota? {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let directory = ProcessInfo.processInfo.environment["GROK_HOME"]
             .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
@@ -65,7 +65,17 @@ enum GrokQuota {
         let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         guard let (payload, response) = try? await session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+              let http = response as? HTTPURLResponse else { return nil }
+        if http.statusCode == 401 {
+            status.authorization = "Credentials rejected"
+        }
+        guard http.statusCode == 200 else { return nil }
+        status.authorization = "Signed in"
+        if let billing = decodeBilling(payload),
+           billing.isUnifiedBillingUser == true,
+           billing.currentPeriod.type == "USAGE_PERIOD_TYPE_WEEKLY" {
+            status.subscription = "Shared weekly access"
+        }
         return parse(payload)
     }
 
@@ -76,11 +86,14 @@ enum GrokQuota {
             .max { $0.expiration < $1.expiration }?.key
     }
 
-    static func parse(_ data: Data, now: Date = Date()) -> CodexQuota? {
+    private static func decodeBilling(_ data: Data) -> Billing? {
         let decoder = JSONDecoder()
-        let billing = (try? decoder.decode(Envelope.self, from: data))?.config
+        return (try? decoder.decode(Envelope.self, from: data))?.config
             ?? (try? decoder.decode(Billing.self, from: data))
-        guard let billing, billing.isUnifiedBillingUser != false,
+    }
+
+    static func parse(_ data: Data, now: Date = Date()) -> CodexQuota? {
+        guard let billing = decodeBilling(data), billing.isUnifiedBillingUser != false,
               billing.currentPeriod.type == "USAGE_PERIOD_TYPE_WEEKLY",
               (0...100).contains(billing.creditUsagePercent) else { return nil }
 

@@ -5,11 +5,13 @@ import json
 import os
 import shutil
 import subprocess
+import sys
+import urllib.error
 import unicodedata
 import urllib.request
 
 
-def read_quota():
+def read_quota(status):
     path = os.environ.get('PATH', '') + os.pathsep + os.path.expanduser('~/.local/bin') + ':/opt/homebrew/bin:/usr/local/bin'
     if not shutil.which('claude', path=path):
         return {}
@@ -22,9 +24,13 @@ def read_quota():
                              '-a', getpass.getuser(), '-w'], capture_output=True, timeout=10)
     if result.returncode != 0:
         return {}
-    token = json.loads(result.stdout).get('claudeAiOauth', {}).get('accessToken')
+    oauth = json.loads(result.stdout).get('claudeAiOauth', {})
+    token = oauth.get('accessToken')
     if not isinstance(token, str) or not token:
         return {}
+    plan = oauth.get('subscriptionType')
+    if isinstance(plan, str) and plan and plan != 'unknown':
+        status['subscription'] = plan
     request = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={
         'Authorization': 'Bearer ' + token,
         'anthropic-beta': 'oauth-2025-04-20',
@@ -35,6 +41,7 @@ def read_quota():
         def redirect_request(self, *args, **kwargs):
             return None
     with urllib.request.build_opener(NoRedirect).open(request, timeout=15) as response:
+        status["authorization"] = "Signed in"
         data = response.read(65537)
         if len(data) > 65536:
             return {}
@@ -46,7 +53,13 @@ def read_quota():
 
 
 if __name__ == '__main__':
+    status = {}
+    quota = {}
     try:
-        print(json.dumps(read_quota()))
+        quota = read_quota(status)
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            status['authorization'] = 'Credentials rejected'
     except (OSError, ValueError, subprocess.SubprocessError):
-        print('{}')
+        pass
+    print(json.dumps(dict(status, quota=quota) if '--status' in sys.argv else quota))

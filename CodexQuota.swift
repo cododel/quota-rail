@@ -13,6 +13,7 @@ struct CodexQuota: Sendable {
     let availableResets: [ResetCredit]
     let usageCreditBalance: Decimal?
     let unlimitedUsageCredits: Bool
+    var primaryWindowID = "primary"
     var additionalWindows: [LimitWindow] = []
 
     struct LimitWindow: Identifiable, Sendable {
@@ -22,6 +23,8 @@ struct CodexQuota: Sendable {
         let reset: Date?
 
         var label: String {
+            if id == "monthly" || id == "monthTotal" { return "Monthly" }
+            if id == "monthCode" { return "Monthly code" }
             guard let minutes else { return "Limit" }
             if minutes.isMultiple(of: 1_440) { return "\(minutes / 1_440)d" }
             if minutes.isMultiple(of: 60) { return "\(minutes / 60)h" }
@@ -30,7 +33,7 @@ struct CodexQuota: Sendable {
     }
 
     var windows: [LimitWindow] {
-        [LimitWindow(id: "primary", remaining: remaining, minutes: windowMinutes, reset: reset)] + additionalWindows
+        [LimitWindow(id: primaryWindowID, remaining: remaining, minutes: windowMinutes, reset: reset)] + additionalWindows
     }
 
     static func readWindows(_ limits: [String: Any], now: Date = Date()) -> [LimitWindow] {
@@ -68,7 +71,7 @@ struct CodexQuota: Sendable {
         case unavailable = "Codex quota unavailable"
     }
 
-    static func read() -> Result<Self, Status> {
+    static func read(status: inout ProviderStatus) -> Result<Self, Status> {
         let environment = ProcessInfo.processInfo.environment
         let home = FileManager.default.homeDirectoryForCurrentUser
         let folders = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
@@ -127,10 +130,22 @@ struct CodexQuota: Sendable {
             _ = try request(1, "initialize", ["clientInfo": ["name": "projector-overlay", "version": "0.1"]])
             try send(["method": "initialized"])
             let auth = try request(2, "account/read", ["refreshToken": false])
-            if auth["requiresOpenaiAuth"] as? Bool == false { return .failure(.apiProfile) }
-            guard let account = auth["account"] as? [String: Any] else { return .failure(.signedOut) }
-            if account["type"] as? String == "apiKey" { return .failure(.apiProfile) }
+            guard let account = auth["account"] as? [String: Any] else {
+                if auth["requiresOpenaiAuth"] as? Bool == false { return .failure(.apiProfile) }
+                status.authorization = "Signed out"
+                return .failure(.signedOut)
+            }
+            status.authorization = "Signed in"
+            if account["type"] as? String == "apiKey" {
+                status.authorization = "API key"
+                status.subscription = "API profile"
+                return .failure(.apiProfile)
+            }
+            if let plan = account["planType"] as? String, !plan.isEmpty, plan != "unknown" {
+                status.subscription = plan.capitalized
+            }
 
+            if auth["requiresOpenaiAuth"] as? Bool == false { return .failure(.apiProfile) }
             let response = try request(3, "account/rateLimits/read")
             let resetBank = response["rateLimitResetCredits"] as? [String: Any]
             let resetCredits = (resetBank?["availableCount"] as? Int).flatMap { $0 >= 0 ? $0 : nil }
