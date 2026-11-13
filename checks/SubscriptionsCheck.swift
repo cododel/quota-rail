@@ -69,6 +69,20 @@ struct SubscriptionsCheck {
         precondition(allLive.allSatisfy { !$0.isMock })
         precondition(OverlaySubscription.resolve(codex: live, antigravity: agy, claude: claudeLive,
             fullDemo: true, now: now).allSatisfy(\.isMock))
+        let grokCredentials = Data("""
+            {"older":{"auth_mode":"oidc","key":"older","expires_at":1700000000},
+             "current":{"auth_mode":"oidc","key":"current","expires_at":"2027-01-20T14:15:30Z"}}
+            """.utf8)
+        precondition(GrokQuota.accessToken(from: grokCredentials) == "current")
+        let grokPayload = Data("""
+            {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":41,
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2027-01-20T14:15:30.192Z"}}}
+            """.utf8)
+        let grok = GrokQuota.parse(grokPayload, now: now)!
+        precondition(grok.remaining == 59 && grok.windows.map(\.label) == ["7d"])
+        precondition(GrokQuota.parse(grokPayload, now: now.addingTimeInterval(604_800)) == nil)
+        let withGrok = OverlaySubscription.resolve(codex: live, antigravity: agy, claude: claudeLive, grok: grok, now: now)
+        precondition(withGrok.map(\.id) == ["claude", "codex", "gemini", "grok"])
         print("PASS: Antigravity parsing, invalid/expired data, per-provider fallback, forced demo")
         print("PASS: both quota windows, percentages, Claude mock and single banked reset")
         print("PASS: flag off, live quota preservation, two-mock fill, three-mock fallback")

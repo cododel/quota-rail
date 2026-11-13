@@ -18,7 +18,7 @@ jobs:
           persist-credentials: false
       - name: Run checks
         run: |
-          xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 -module-cache-path cache CodexQuota.swift AntigravityQuota.swift ClaudeQuota.swift OverlaySubscription.swift checks/SubscriptionsCheck.swift -o checks/subscriptions-check
+          xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 -module-cache-path cache CodexQuota.swift AntigravityQuota.swift ClaudeQuota.swift GrokQuota.swift OverlaySubscription.swift checks/SubscriptionsCheck.swift -o checks/subscriptions-check
           ./checks/subscriptions-check
           /usr/bin/python3 checks/agy-helper-check.py
       - name: Build archive

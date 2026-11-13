@@ -23,7 +23,7 @@ The archive is not notarized. To check for a newer build, open the gear menu and
 | Codex | Available quota windows and reset times, plus credits and banked resets when reported |
 | Claude Code | 5-hour and weekly quotas, when reported |
 | Antigravity | 5-hour and weekly quotas for Gemini and Claude/GPT |
-| Grok Build (in development) | Shared weekly quota and reset time |
+| Grok Build | Shared weekly quota and reset time |
 
 Check the release notes for what ships in each download.
 

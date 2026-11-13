@@ -3,3 +3,4 @@ Codex app icon — installed ChatGPT app, icon-codex-light.png
 Gemini outline — https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg
 GPT monochrome mark — installed ChatGPT app, chatgptTemplate.png
 Antigravity mark — https://antigravity.google/favicon.ico (from CanvasTTY assets, converted to PNG; rendered as monochrome template)
+Grok mark — https://github.com/lobehub/lobe-icons (icons-static-svg/grok.svg, explicit dimensions and white fill for the overlay)

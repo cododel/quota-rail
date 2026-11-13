@@ -7,11 +7,13 @@ enum HarnessImages {
         .deletingLastPathComponent().appendingPathComponent("assets")
     static let claude = NSImage(contentsOf: directory.appendingPathComponent("claude.png"))
     static let antigravity = NSImage(contentsOf: directory.appendingPathComponent("antigravity.png"))
+    static let grok = NSImage(contentsOf: directory.appendingPathComponent("grok.svg"))
     static let gpt = NSImage(contentsOf: directory.appendingPathComponent("gpt.png"))
 }
 
 struct EdgeShape: Shape {
     var progress: CGFloat
+    var bodyHeight: CGFloat = OverlayGeometry.bodyHeight
     var animatableData: CGFloat {
         get { progress }
         set { progress = newValue }
@@ -22,7 +24,7 @@ struct EdgeShape: Shape {
         let depthProgress = 1 - pow(1 - progress, 2)
         let heightProgress = progress * progress
         let depth = max(3, 3 + (OverlayGeometry.width - 3) * depthProgress)
-        let span = max(20, 24 + (OverlayGeometry.bodyHeight - 24) * heightProgress)
+        let span = max(20, 24 + (bodyHeight - 24) * heightProgress)
         let x = rect.maxX
         let y = rect.midY
         let left = x - depth
@@ -154,6 +156,7 @@ final class OverlayState: ObservableObject {
     @Published var hasScreenAccess = CGPreflightScreenCaptureAccess()
     @Published var selectedSubscription: String?
     @Published var claudeQuota: CodexQuota?
+    @Published var grokQuota: CodexQuota?
     @Published var antigravityQuota: AntigravityQuota?
     @Published var fullDemo = CommandLine.arguments.contains("--full-demo")
         || UserDefaults.standard.bool(forKey: "projector.overlay.fullDemo") {
@@ -188,7 +191,7 @@ final class OverlayState: ObservableObject {
     }
 
     var subscriptions: [OverlaySubscription] {
-        OverlaySubscription.resolve(codex: codexQuota, antigravity: antigravityQuota, claude: claudeQuota, fullDemo: fullDemo, now: demoStart)
+        OverlaySubscription.resolve(codex: codexQuota, antigravity: antigravityQuota, claude: claudeQuota, grok: grokQuota, fullDemo: fullDemo, now: demoStart)
     }
     var settingsAtMouseDown: Bool?
     @Published var pinned = false
@@ -206,9 +209,12 @@ struct Overlay: View {
     private let openSpring = Animation.spring(response: 0.38, dampingFraction: 0.9, blendDuration: 0)
     private let closeSpring = Animation.spring(response: 0.34, dampingFraction: 1.0, blendDuration: 0)
 
+    private var extraHeight: CGFloat { state.visibleSubscriptions.count > 3 ? 54 : 0 }
+
     var body: some View {
         ZStack(alignment: .trailing) {
-            let contour = EdgeShape(progress: state.expanded ? 1 : 0)
+            let contour = EdgeShape(progress: state.expanded ? 1 : 0,
+                                    bodyHeight: OverlayGeometry.bodyHeight + extraHeight)
             Rectangle().fill(.black)
                 .overlay(alignment: .trailing) {
                     ZStack {
@@ -248,7 +254,7 @@ struct Overlay: View {
                 .onHover { state.settingsHovered = $0 }
                 .accessibilityLabel("Overlay settings")
                 .padding(.trailing, 0)
-                .offset(x: state.expanded ? 0 : 52, y: state.expanded ? OverlayGeometry.settingsCenterY : 20)
+                .offset(x: state.expanded ? 0 : 52, y: state.expanded ? OverlayGeometry.settingsCenterY + extraHeight / 2 : 20)
                 .animation(
                     reduceMotion ? nil : .spring(response: state.expanded ? 0.44 : 0.32, dampingFraction: 0.95),
                     value: state.expanded
@@ -354,8 +360,13 @@ struct Overlay: View {
                     .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 Group {
-                    if let image = mark == "gemini" ? HarnessImages.antigravity
-                        : mark == "claude" ? HarnessImages.claude : HarnessImages.gpt {
+                    let image = switch mark {
+                    case "grok": HarnessImages.grok
+                    case "gemini": HarnessImages.antigravity
+                    case "claude": HarnessImages.claude
+                    default: HarnessImages.gpt
+                    }
+                    if let image {
                         Image(nsImage: image).resizable().renderingMode(.template).aspectRatio(contentMode: .fit)
                     }
                 }
@@ -447,7 +458,8 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                     async let codex = Task.detached(priority: .utility) { CodexQuota.read() }.value
                     async let antigravity = Task.detached(priority: .utility) { AntigravityQuota.read() }.value
                     async let claude = Task.detached(priority: .utility) { ClaudeQuota.read() }.value
-                    let (codexResult, antigravityResult, claudeResult) = await (codex, antigravity, claude)
+                    async let grok = GrokQuota.read()
+                    let (codexResult, antigravityResult, claudeResult, grokResult) = await (codex, antigravity, claude, grok)
                     guard !Task.isCancelled else { return }
                     if !state.fullDemo {
                         switch codexResult {
@@ -460,6 +472,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                         }
                         state.antigravityQuota = antigravityResult
                         state.claudeQuota = claudeResult
+                        state.grokQuota = grokResult
                         state.nextQuotaRefresh = Date().addingTimeInterval(60)
                     }
                 }

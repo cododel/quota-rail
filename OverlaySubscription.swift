@@ -14,7 +14,7 @@ struct OverlaySubscription: Identifiable {
         let windows: [CodexQuota.LimitWindow]
     }
 
-    static func resolve(codex: CodexQuota?, antigravity: AntigravityQuota? = nil, claude: CodexQuota? = nil, includeMocks: Bool = true, fullDemo: Bool = false, now: Date) -> [Self] {
+    static func resolve(codex: CodexQuota?, antigravity: AntigravityQuota? = nil, claude: CodexQuota? = nil, grok: CodexQuota? = nil, includeMocks: Bool = true, fullDemo: Bool = false, now: Date) -> [Self] {
         var live: [String: Self] = [:]
         if !fullDemo {
             if let claude {
@@ -31,13 +31,18 @@ struct OverlaySubscription: Identifiable {
                     ])
             }
         }
-        if !includeMocks && !fullDemo { return ["claude", "codex", "gemini"].compactMap { live[$0] } }
+        let grokSubscription = fullDemo ? nil : grok.map {
+            Self(id: "grok", name: "Grok Build", color: .cyan, quota: $0, isMock: false)
+        }
+        if !includeMocks && !fullDemo {
+            return ["claude", "codex", "gemini"].compactMap { live[$0] } + [grokSubscription].compactMap { $0 }
+        }
         let examples: [(String, String, Color, Int, Int, Int, [Int])] = [
             ("claude", "Claude", .orange, 73, 300, 2_450, [2]),
             ("codex", "Codex", .mint, 21, 10_080, 12_800, [4, 11, 21]),
             ("gemini", "Antigravity", .yellow, 52, 300, 0, []),
         ]
-        return examples.map { id, name, color, remaining, window, balance, expirationDays in
+        let subscriptions = examples.map { id, name, color, remaining, window, balance, expirationDays in
             if let real = live[id] { return real }
             // UI fixtures only; these fields do not imply provider API capabilities or pricing.
             let resets = expirationDays.enumerated().map { index, days in
@@ -71,5 +76,6 @@ struct OverlaySubscription: Identifiable {
             ] : []
             return Self(id: id, name: name, color: color, quota: quota, isMock: true, limitGroups: groups)
         }
+        return subscriptions + [grokSubscription].compactMap { $0 }
     }
 }
