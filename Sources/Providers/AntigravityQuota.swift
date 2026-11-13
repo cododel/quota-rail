@@ -100,11 +100,15 @@ struct AntigravityQuota: Sendable {
             guard posix_spawn_file_actions_adddup2(&actions, terminal, descriptor) == 0 else { return nil }
         }
 
-        var arguments = [executable, "--settings", settings].map { strdup($0) }
+        var arguments = [executable, "--settings", settings].map { value in
+            value.withCString { strdup($0) }
+        }
         defer { arguments.forEach { free($0) } }
         guard arguments.allSatisfy({ $0 != nil }) else { return nil }
         arguments.append(nil)
-        var environment = ProcessInfo.processInfo.environment.map { strdup("\($0.key)=\($0.value)") }
+        var environment = ProcessInfo.processInfo.environment.map { entry in
+            "\(entry.key)=\(entry.value)".withCString { strdup($0) }
+        }
         defer { environment.forEach { free($0) } }
         guard environment.allSatisfy({ $0 != nil }) else { return nil }
         environment.append(nil)
