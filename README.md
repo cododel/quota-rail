@@ -1,28 +1,64 @@
 # Quota Rail
 
-A standalone macOS quota overlay for Codex, Claude, and Antigravity. The overlay uses mock data when provider quotas are unavailable.
+A native macOS overlay for checking how much of your AI subscriptions you have left. Hover over the right edge of the screen to reveal your quotas, then click a ring for details.
 
-On an Apple Silicon Mac with macOS 14 or later and Xcode command line tools:
+[Download for Apple Silicon](https://github.com/cododel/quota-rail/releases) · [Supported subscriptions](#supported-subscriptions) · [Build from source](#development)
+
+![Quota Rail on dark and blue backgrounds, with the settings button at rest and on hover](docs/images/showcase.png)
+
+## Install
+
+Requires an Apple Silicon Mac with macOS 14 or later.
+
+1. Download `quota-rail-macos-arm64.zip` from [GitHub Releases](https://github.com/cododel/quota-rail/releases).
+2. Extract the archive and run `./projector-overlay` from the extracted folder.
+3. Sign in through the CLI for each subscription you want to see. Quota Rail uses those existing sign-ins and shows providers when quota data is available.
+
+The archive is not notarized. To check for a newer build, open the gear menu and select **Check for Updates**. **Download Update** opens the archive in your browser.
+
+## Supported subscriptions
+
+| Provider | What the overlay shows |
+| --- | --- |
+| Codex | Available quota windows and reset times, plus credits and banked resets when reported |
+| Claude Code | 5-hour and weekly quotas, when reported |
+| Antigravity | 5-hour and weekly quotas for Gemini and Claude/GPT |
+| Grok Build (in development) | Shared weekly quota and reset time |
+
+Check the release notes for what ships in each download.
+
+## Quota details
+
+Click a ring to see its quota windows and reset times. In the gear menu, choose which subscriptions appear on the rail or keep it expanded.
+
+<p>
+  <img src="docs/images/quota-details.png" width="420" alt="Codex popover showing weekly quota, credits, and expiration dates for three banked resets">
+</p>
+
+## Development
+
+Run the Swift watcher from the repository with Bun and the Xcode command line tools installed:
+
+```sh
+bun watch.mjs
+```
+
+The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data.
+
+To build once:
 
 ```sh
 xcrun --sdk macosx swiftc -O -parse-as-library \
   -target arm64-apple-macosx14.0 -module-cache-path cache \
   *.swift -o projector-overlay
-./projector-overlay --full-demo
+./projector-overlay
 ```
 
-Run without `--full-demo` to read quotas from installed and authenticated provider CLIs. The Claude and Antigravity helpers use `/usr/bin/python3`. Keep the helpers and `assets/` next to the executable.
+Keep the provider helper scripts and `assets/` next to the executable. The Claude and Antigravity helpers use `/usr/bin/python3`. GitHub Actions builds the Apple Silicon archive and publishes it when a `vX.Y.Z` tag is pushed.
 
-For development, `node watch.mjs --full-demo` rebuilds and restarts the overlay when Swift files change.
+<details>
+<summary>Overlay geometry study</summary>
 
-GitHub Actions builds an Apple Silicon archive for pull requests and pushes to
-`main`. Pushing an existing commit as a `vX.Y.Z` tag builds the archive and
-publishes it on GitHub Releases.
+![Early drawing of the rail profile, indicator spacing, and settings button geometry](docs/images/geometry-study.png)
 
-Download `quota-rail-macos-arm64.zip`, extract the folder, and run
-`./projector-overlay` from that folder. The archive is not notarized.
-
-Quota Rail checks the latest published GitHub release, including pre-releases at startup. The settings
-popover also has **Check for Updates**. When a newer archive is available,
-**Download Update** opens the download in your browser. Quit the old overlay,
-extract the archive, and launch the new executable from the extracted folder.
+</details>
