@@ -92,7 +92,7 @@ for UI changes. These are acceptance anchors, not claims of past coverage.
 
 | Change | Check |
 | --- | --- |
-| Providers | Missing CLI; missing/expired login; unknown plan; empty/malformed response; valid windows; packaged helper lookup |
+| Providers | Missing CLI; missing/expired login; unknown plan; empty/malformed response; valid windows; Antigravity status-line callback and CLI cleanup |
 | Demo/watcher | Both flags and no flag; stored preference isolation; all connectors; d/r; failed compile retains child; cleanup |
 | Login item | Exact installed build; registration status/logs; failure retry; user-disabled choice; actual sign-out/sign-in separately |
 | Updates | Isolated signed version pair; install/relaunch; preferences/resources retained; up-to-date; cancel; unavailable/corrupt ZIP; bad feed signature; unwritable destination |
