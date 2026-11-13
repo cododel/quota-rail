@@ -45,6 +45,16 @@ Quota Rail checks for updates on launch. You can also select **Check for Updates
 
 If you're upgrading from v0.0.1, quit the old `projector-overlay` process, download the new ZIP once, and open `Quota Rail.app`. Your saved subscription visibility carries over.
 
+### If Adaptive Outline stops working after an update
+
+macOS may still show screen recording access as enabled for the previous build.
+If toggling the existing entry does not restore the outline, grant access to the updated app:
+
+1. Quit Quota Rail.
+2. In **System Settings → Privacy & Security → Screen & System Audio Recording**, select **Quota Rail** and remove the entry with **−**.
+3. Use **+** to add the updated **Quota Rail.app** from Applications and enable access.
+4. Open Quota Rail again. If macOS asks you to quit and reopen the app, follow that prompt.
+
 ## Supported subscriptions
 
 | Provider | What the overlay shows |
