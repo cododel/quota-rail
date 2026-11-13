@@ -46,6 +46,14 @@ multi-resolution ICNS from the repository root with
 `swift -module-cache-path cache scripts/build-icon.swift`. The packaged app declares
 `QuotaRail.icns` as its bundle icon. Generated concept studies are not production assets.
 
+### Rail icon study
+
+The approved concept board shows the Rail silhouette at several scales and in
+monochrome. Use it as a visual reference for small-size legibility and for how
+the shape reads without color. The shipped SVG defines the final geometry and colors.
+
+![Rail icon study showing the full-size concept, smaller previews, and a monochrome variant](images/rail-icon-study.png)
+
 ## Anatomy and geometry
 
 All dimensions are logical macOS points (pt), not display pixels. A 40 pt rail spans
