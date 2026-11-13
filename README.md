@@ -44,10 +44,10 @@ Click a ring to see its quota windows and reset times. In the gear menu, choose 
 Run the Swift watcher from the repository with Bun and the Xcode command line tools installed:
 
 ```sh
-bun watch.mjs
+bun run watch-preview
 ```
 
-The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data.
+The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data. In the terminal, press `d` to switch between live and demo quotas, or `r` to restart the last successful build.
 
 To build once:
 

@@ -1,0 +1,7 @@
+{
+  "name": "quota-rail",
+  "private": true,
+  "scripts": {
+    "watch-preview": "bun watch.mjs"
+  }
+}
