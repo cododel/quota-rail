@@ -19,7 +19,7 @@ enum LoginItem {
 
         let service = SMAppService.mainApp
         switch service.status {
-        case .notRegistered:
+        case .notRegistered, .notFound:
             do {
                 try service.register()
             } catch {
@@ -29,8 +29,6 @@ enum LoginItem {
             }
         case .enabled, .requiresApproval:
             break
-        case .notFound:
-            return
         @unknown default:
             return
         }
