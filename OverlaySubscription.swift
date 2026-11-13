@@ -14,38 +14,39 @@ struct OverlaySubscription: Identifiable {
         let windows: [CodexQuota.LimitWindow]
     }
 
-    static func resolve(codex: CodexQuota?, antigravity: AntigravityQuota? = nil, claude: CodexQuota? = nil, grok: CodexQuota? = nil, openCodeGo: CodexQuota? = nil, kimi: CodexQuota? = nil, includeMocks: Bool = true, fullDemo: Bool = false, now: Date) -> [Self] {
-        var live: [String: Self] = [:]
+    static func resolve(codex: CodexQuota?, antigravity: AntigravityQuota? = nil, claude: CodexQuota? = nil, grok: CodexQuota? = nil, openCodeGo: CodexQuota? = nil, kimi: CodexQuota? = nil, fullDemo: Bool = false, now: Date) -> [Self] {
         if !fullDemo {
+            var live: [Self] = []
             if let claude {
-                live["claude"] = Self(id: "claude", name: "Claude", color: .orange, quota: claude, isMock: false)
+                live.append(Self(id: "claude", name: "Claude", color: .orange, quota: claude, isMock: false))
             }
             if let codex {
-                live["codex"] = Self(id: "codex", name: "Codex", color: .mint, quota: codex, isMock: false)
+                live.append(Self(id: "codex", name: "Codex", color: .mint, quota: codex, isMock: false))
             }
             if let antigravity {
-                live["gemini"] = Self(id: "gemini", name: "Antigravity", color: .yellow,
+                live.append(Self(id: "gemini", name: "Antigravity", color: .yellow,
                     quota: antigravity.gemini, isMock: false, limitGroups: [
                         LimitGroup(id: "gemini", name: "Gemini", windows: antigravity.gemini.windows),
                         LimitGroup(id: "claude-gpt", name: "Claude/GPT", windows: antigravity.thirdParty.windows)
-                    ])
+                    ]))
             }
-        }
-        let extraSubscriptions = fullDemo ? [] : [
-            grok.map { Self(id: "grok", name: "Grok Build", color: .cyan, quota: $0, isMock: false) },
-            openCodeGo.map { Self(id: "opencode-go", name: "OpenCode Go", color: .purple, quota: $0, isMock: false) },
-            kimi.map { Self(id: "kimi", name: "Kimi", color: .blue, quota: $0, isMock: false) }
-        ].compactMap { $0 }
-        if !includeMocks && !fullDemo {
-            return ["claude", "codex", "gemini"].compactMap { live[$0] } + extraSubscriptions
+            if let grok {
+                live.append(Self(id: "grok", name: "Grok Build", color: .cyan, quota: grok, isMock: false))
+            }
+            if let openCodeGo {
+                live.append(Self(id: "opencode-go", name: "OpenCode Go", color: .purple, quota: openCodeGo, isMock: false))
+            }
+            if let kimi {
+                live.append(Self(id: "kimi", name: "Kimi", color: .blue, quota: kimi, isMock: false))
+            }
+            return live
         }
         let examples: [(String, String, Color, Int, Int, Int, [Int])] = [
             ("claude", "Claude", .orange, 73, 300, 2_450, [2]),
             ("codex", "Codex", .mint, 21, 10_080, 12_800, [4, 11, 21]),
             ("gemini", "Antigravity", .yellow, 52, 300, 0, []),
         ]
-        let subscriptions = examples.map { id, name, color, remaining, window, balance, expirationDays in
-            if let real = live[id] { return real }
+        let demo = examples.map { id, name, color, remaining, window, balance, expirationDays in
             // UI fixtures only; these fields do not imply provider API capabilities or pricing.
             let resets = expirationDays.enumerated().map { index, days in
                 CodexQuota.ResetCredit(
@@ -78,6 +79,28 @@ struct OverlaySubscription: Identifiable {
             ] : []
             return Self(id: id, name: name, color: color, quota: quota, isMock: true, limitGroups: groups)
         }
-        return subscriptions + extraSubscriptions
+        let additional: [(id: String, name: String, color: Color, windows: [CodexQuota.LimitWindow])] = [
+            ("grok", "Grok Build", .cyan, [
+                .init(id: "weekly", remaining: 57, minutes: 10_080, reset: now.addingTimeInterval(259_200))
+            ]),
+            ("opencode-go", "OpenCode Go", .purple, [
+                .init(id: "rolling", remaining: 76, minutes: 300, reset: now.addingTimeInterval(7_200)),
+                .init(id: "weekly", remaining: 48, minutes: 10_080, reset: now.addingTimeInterval(432_000)),
+                .init(id: "monthly", remaining: 62, minutes: nil, reset: now.addingTimeInterval(1_209_600))
+            ]),
+            ("kimi", "Kimi", .blue, [
+                .init(id: "limit5h", remaining: 84, minutes: 300, reset: now.addingTimeInterval(10_800)),
+                .init(id: "limit7d", remaining: 65, minutes: 10_080, reset: now.addingTimeInterval(345_600))
+            ])
+        ]
+        return demo + additional.compactMap { provider in
+            guard let primary = provider.windows.first else { return nil }
+            let quota = CodexQuota(
+                remaining: primary.remaining, windowMinutes: primary.minutes, reset: primary.reset,
+                resetCredits: nil, availableResets: [], usageCreditBalance: nil, unlimitedUsageCredits: false,
+                primaryWindowID: primary.id, additionalWindows: Array(provider.windows.dropFirst())
+            )
+            return Self(id: provider.id, name: provider.name, color: provider.color, quota: quota, isMock: true)
+        }
     }
 }

@@ -162,10 +162,16 @@ final class OverlayState: ObservableObject {
     @Published var openCodeGoQuota: CodexQuota?
     @Published var grokQuota: CodexQuota?
     @Published var antigravityQuota: AntigravityQuota?
-    @Published var fullDemo = CommandLine.arguments.contains("--full-demo")
-        || UserDefaults.standard.bool(forKey: "projector.overlay.fullDemo") {
+    private static let forceFullDemo = CommandLine.arguments.contains("--full-demo")
+    let showsDemoSettings = CommandLine.arguments.contains("--demo") && !OverlayState.forceFullDemo
+
+    @Published var fullDemo = OverlayState.forceFullDemo
+        || (CommandLine.arguments.contains("--demo")
+            && UserDefaults.standard.bool(forKey: "projector.overlay.fullDemo")) {
         didSet {
-            UserDefaults.standard.set(fullDemo, forKey: "projector.overlay.fullDemo")
+            if showsDemoSettings {
+                UserDefaults.standard.set(fullDemo, forKey: "projector.overlay.fullDemo")
+            }
             nextQuotaRefresh = .distantPast
         }
     }
@@ -181,10 +187,11 @@ final class OverlayState: ObservableObject {
     }
 
     func isSubscriptionVisible(_ id: String) -> Bool {
-        !hiddenSubscriptions.contains(id)
+        fullDemo || !hiddenSubscriptions.contains(id)
     }
 
     func setSubscriptionVisible(_ id: String, _ visible: Bool) {
+        guard !fullDemo else { return }
         if visible {
             hiddenSubscriptions.remove(id)
         } else {
@@ -272,26 +279,36 @@ struct Overlay: View {
                             Divider()
                         }
                         Toggle("Keep overlay visible", isOn: $state.pinned)
-                        Toggle("Full demo mode", isOn: $state.fullDemo)
-                            .toggleStyle(.checkbox)
+                        if state.showsDemoSettings {
+                            Toggle("Full demo mode", isOn: $state.fullDemo)
+                                .toggleStyle(.checkbox)
+                        }
                         Divider()
+                        let signedInProviders = state.providerStatuses.filter(\.showsInSettings)
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Subscriptions")
                                 .font(.system(size: 12, weight: .medium))
-                            if state.subscriptions.isEmpty {
-                                Text(state.quotaStatus)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            ForEach(state.subscriptions) { subscription in
-                                Toggle(isOn: Binding(
-                                    get: { state.isSubscriptionVisible(subscription.id) },
-                                    set: { state.setSubscriptionVisible(subscription.id, $0) }
-                                )) {
-                                    Text(subscription.name)
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    if state.fullDemo {
+                                        ForEach(state.subscriptions) { subscription in
+                                            subscriptionRow(subscription.name, subscription: subscription, detail: nil)
+                                        }
+                                    } else if state.providerStatuses.isEmpty {
+                                        Text("Checking providers…").foregroundStyle(.secondary)
+                                    } else if signedInProviders.isEmpty {
+                                        Text("No signed-in CLIs found").foregroundStyle(.secondary)
+                                    } else {
+                                        ForEach(signedInProviders, id: \.name) { provider in
+                                            let subscription = state.subscriptions.first { $0.name == provider.name }
+                                            subscriptionRow(provider.name, subscription: subscription,
+                                                            detail: subscription == nil ? "No quota" : provider.planLabel)
+                                        }
+                                    }
                                 }
-                                .toggleStyle(.checkbox)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            .frame(width: 268, height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : signedInProviders.count) * 24)))
                         }
                         if !state.hasScreenAccess {
                             Button("Allow Screen Access for Adaptive Outline") {
@@ -321,6 +338,31 @@ struct Overlay: View {
 
     private var settingsExpanded: Bool {
         state.settingsHovered || state.settings
+    }
+
+    private func subscriptionRow(_ name: String, subscription: OverlaySubscription?, detail: String?) -> some View {
+        HStack(spacing: 8) {
+            Toggle(isOn: Binding(
+                get: { subscription.map { state.isSubscriptionVisible($0.id) } ?? false },
+                set: { visible in
+                    if let subscription { state.setSubscriptionVisible(subscription.id, visible) }
+                }
+            )) {
+                Text(name).lineLimit(1)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(subscription == nil || state.fullDemo)
+
+            Spacer(minLength: 0)
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(detail)
+            }
+        }
+        .frame(height: 20)
     }
 
     private func movingMeter(_ subscription: OverlaySubscription, row: CGFloat) -> some View {
