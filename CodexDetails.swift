@@ -5,6 +5,8 @@ struct CodexDetails: View {
     var providerName = "Codex"
     var limitGroups: [OverlaySubscription.LimitGroup] = []
 
+    var staleSince: Date?
+
     private func dateLabel(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -45,6 +47,11 @@ struct CodexDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(providerName).font(.system(size: 14, weight: .semibold))
+            if let staleSince {
+                Text("Stale · Last updated \(dateLabel(staleSince))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             if limitGroups.isEmpty {
                 windowRows(quota.windows)
             } else {

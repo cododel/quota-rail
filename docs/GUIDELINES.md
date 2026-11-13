@@ -33,8 +33,10 @@ copying tokens into this document. The following safeguards protect those intera
   Preserve returned windows, groups and reset times. Unknown plans stay unknown.
   Invalid or unavailable data must not become a fabricated percentage.
 - In normal mode, settings lists only installed CLIs with a recognized signed-in account,
-  including accounts without quota. Only enabled subscriptions with valid quota appear
-  as rings. Persist visibility choices; follow DESIGN.md for row and empty-state rendering.
+  including accounts without quota. Enabled subscriptions appear as rings after a successful
+  quota read. A failed refresh retains the last successful snapshot in memory and marks it
+  stale until refreshed. Clear it when the CLI is removed or the provider explicitly
+  reports lost authorization or an API-only profile. Persist visibility choices separately.
 - Preserve all available quota windows and banked-reset expirations for details. Expose
   credits only when supported, and distinguish an approximate conversion from cash value.
 - Antigravity is one subscription with Gemini and Claude/GPT groups, each with 5h and

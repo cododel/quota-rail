@@ -29,6 +29,37 @@ struct SubscriptionsCheck {
         let live = CodexQuota(remaining: 37, windowMinutes: 10_080, reset: now,
             resetCredits: 3, availableResets: [], usageCreditBalance: 125,
             unlimitedUsageCredits: false)
+        for provider in ["Claude", "Codex", "Antigravity", "Grok Build", "OpenCode Go", "Kimi"] {
+            var snapshot = ProviderQuotaSnapshot<CodexQuota>()
+            let installed = ProviderStatus(provider, executable: "sh")
+            precondition(installed.cliInstalled)
+            snapshot.update(nil, status: installed, now: now)
+            precondition(snapshot.quota == nil && !snapshot.isStale)
+
+            var signedIn = installed
+            signedIn.authorization = "Signed in"
+            snapshot.update(live, status: signedIn, now: now)
+            for delay in [60.0, 120.0] {
+                snapshot.update(nil, status: installed, now: now.addingTimeInterval(delay))
+                precondition(snapshot.quota?.remaining == 37 && snapshot.isStale)
+                precondition(snapshot.lastUpdated == now && snapshot.status?.showsInSettings == true)
+            }
+            let recovered = now.addingTimeInterval(180)
+            snapshot.update(live, status: signedIn, now: recovered)
+            precondition(!snapshot.isStale && snapshot.lastUpdated == recovered)
+
+            for authorization in ["Signed out", "Sign-in required", "Credentials rejected", "API key", "API profile"] {
+                snapshot.update(live, status: signedIn, now: now)
+                var revoked = installed
+                revoked.authorization = authorization
+                snapshot.update(nil, status: revoked, now: recovered)
+                precondition(snapshot.quota == nil && snapshot.lastUpdated == nil && !snapshot.isStale)
+            }
+            snapshot.update(live, status: signedIn, now: now)
+            let removed = ProviderStatus(provider, executable: "quota-rail-missing-cli-fixture")
+            snapshot.update(nil, status: removed, now: recovered)
+            precondition(snapshot.quota == nil && !snapshot.isStale)
+        }
         let normal = OverlaySubscription.resolve(codex: live, now: now)
         precondition(normal.count == 1 && !normal[0].isMock && normal[0].quota.remaining == 37)
         let sameQuota = OverlaySubscription.resolve(codex: live, claude: live, grok: live,

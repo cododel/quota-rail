@@ -39,3 +39,38 @@ struct ProviderStatus: Sendable {
         return (quota, status)
     }
 }
+
+struct ProviderQuotaSnapshot<Quota> {
+    private(set) var quota: Quota?
+    private(set) var status: ProviderStatus?
+    private(set) var lastUpdated: Date?
+
+    var isStale: Bool { quota != nil && status?.quotaAvailable == false }
+
+    mutating func update(_ fetched: Quota?, status current: ProviderStatus, now: Date = Date()) {
+        var status = current
+        status.quotaAvailable = fetched != nil
+        switch current.authorization {
+        case "Signed out", "Sign-in required", "Credentials rejected", "API key", "API profile":
+            quota = nil
+            lastUpdated = nil
+            status.quotaAvailable = false
+        default:
+            if !current.cliInstalled && fetched == nil {
+                quota = nil
+                lastUpdated = nil
+            } else if let fetched {
+                quota = fetched
+                lastUpdated = now
+            } else if quota != nil {
+                if status.authorization == "Unknown", let previous = self.status {
+                    status.authorization = previous.authorization
+                }
+                if status.subscription == "Unknown", let previous = self.status {
+                    status.subscription = previous.subscription
+                }
+            }
+        }
+        self.status = status
+    }
+}

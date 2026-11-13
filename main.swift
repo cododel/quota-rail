@@ -153,18 +153,34 @@ struct SettingsButtonStyle: ButtonStyle {
 @MainActor
 final class OverlayState: ObservableObject {
     let releaseUpdates = ReleaseUpdates()
-    @Published var codexQuota: CodexQuota?
+    @Published var codexSnapshot = ProviderQuotaSnapshot<CodexQuota>()
     @Published var quotaStatus = "Checking Codex quota…"
     @Published var expanded = false
     @Published var borderVisible = false
     @Published var hasScreenAccess = CGPreflightScreenCaptureAccess()
     @Published var selectedSubscription: String?
-    @Published var claudeQuota: CodexQuota?
-    @Published var providerStatuses: [ProviderStatus] = []
-    @Published var kimiQuota: CodexQuota?
-    @Published var openCodeGoQuota: CodexQuota?
-    @Published var grokQuota: CodexQuota?
-    @Published var antigravityQuota: AntigravityQuota?
+    @Published var claudeSnapshot = ProviderQuotaSnapshot<CodexQuota>()
+    var providerStatuses: [ProviderStatus] {
+        [claudeSnapshot.status, codexSnapshot.status, antigravitySnapshot.status,
+         grokSnapshot.status, openCodeGoSnapshot.status, kimiSnapshot.status].compactMap { $0 }
+    }
+
+    func staleQuotaDate(for provider: String) -> Date? {
+        guard !fullDemo else { return nil }
+        switch provider {
+        case "Claude": return claudeSnapshot.isStale ? claudeSnapshot.lastUpdated : nil
+        case "Codex": return codexSnapshot.isStale ? codexSnapshot.lastUpdated : nil
+        case "Antigravity": return antigravitySnapshot.isStale ? antigravitySnapshot.lastUpdated : nil
+        case "Grok Build": return grokSnapshot.isStale ? grokSnapshot.lastUpdated : nil
+        case "OpenCode Go": return openCodeGoSnapshot.isStale ? openCodeGoSnapshot.lastUpdated : nil
+        case "Kimi": return kimiSnapshot.isStale ? kimiSnapshot.lastUpdated : nil
+        default: return nil
+        }
+    }
+    @Published var kimiSnapshot = ProviderQuotaSnapshot<CodexQuota>()
+    @Published var openCodeGoSnapshot = ProviderQuotaSnapshot<CodexQuota>()
+    @Published var grokSnapshot = ProviderQuotaSnapshot<CodexQuota>()
+    @Published var antigravitySnapshot = ProviderQuotaSnapshot<AntigravityQuota>()
     private static let forceFullDemo = CommandLine.arguments.contains("--full-demo")
     let showsDemoSettings = CommandLine.arguments.contains("--demo") && !OverlayState.forceFullDemo
 
@@ -205,7 +221,7 @@ final class OverlayState: ObservableObject {
     }
 
     var subscriptions: [OverlaySubscription] {
-        OverlaySubscription.resolve(codex: codexQuota, antigravity: antigravityQuota, claude: claudeQuota, grok: grokQuota, openCodeGo: openCodeGoQuota, kimi: kimiQuota, fullDemo: fullDemo, now: demoStart)
+        OverlaySubscription.resolve(codex: codexSnapshot.quota, antigravity: antigravitySnapshot.quota, claude: claudeSnapshot.quota, grok: grokSnapshot.quota, openCodeGo: openCodeGoSnapshot.quota, kimi: kimiSnapshot.quota, fullDemo: fullDemo, now: demoStart)
     }
     @Published var pinned = false
     @Published var settings = false
@@ -302,7 +318,7 @@ struct Overlay: View {
                                             ForEach(signedInProviders, id: \.name) { provider in
                                                 let subscription = state.subscriptions.first { $0.name == provider.name }
                                                 subscriptionRow(provider.name, subscription: subscription,
-                                                                detail: subscription == nil ? "No quota" : provider.planLabel)
+                                                                detail: subscription == nil ? "No quota" : (provider.quotaAvailable ? provider.planLabel : "Stale"))
                                             }
                                         }
                                     }
@@ -410,11 +426,12 @@ struct Overlay: View {
     }
 
     private func movingMeter(_ subscription: OverlaySubscription, row: CGFloat) -> some View {
-        Button {
+        let staleSince = state.staleQuotaDate(for: subscription.name)
+        return Button {
             state.settings = false
             state.selectedSubscription = state.selectedSubscription == subscription.id ? nil : subscription.id
         } label: {
-            meter(subscription.quota.remaining, color: subscription.color, provider: subscription.name, mark: subscription.id)
+            meter(subscription.quota.remaining, color: subscription.color, provider: subscription.name, mark: subscription.id, isStale: staleSince != nil)
                 .contentShape(Rectangle())
         }
             .buttonStyle(.plain)
@@ -425,7 +442,7 @@ struct Overlay: View {
                         state.selectedSubscription = nil
                     }
                 } content: {
-                    CodexDetails(quota: subscription.quota, providerName: subscription.name, limitGroups: subscription.limitGroups)
+                    CodexDetails(quota: subscription.quota, providerName: subscription.name, limitGroups: subscription.limitGroups, staleSince: staleSince)
                         .foregroundStyle(.white)
                 }
             }
@@ -439,7 +456,7 @@ struct Overlay: View {
             )
     }
 
-    private func meter(_ percent: Int, color: Color, provider: String, mark: String) -> some View {
+    private func meter(_ percent: Int, color: Color, provider: String, mark: String, isStale: Bool) -> some View {
         let logoSize: CGFloat = mark == "kimi" || mark == "opencode-go" ? 11 : 14
         return VStack(spacing: 4) {
             ZStack {
@@ -467,14 +484,14 @@ struct Overlay: View {
                 .frame(width: logoSize, height: logoSize)
             }
             .frame(width: 26, height: 26)
-            Text("\(percent)%")
+            Text(isStale ? "\(percent)%*" : "\(percent)%")
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .frame(height: 14)
         }
         .frame(width: 40, height: 44)
-        .help(provider)
+        .help(isStale ? "\(provider) · Stale quota" : provider)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(provider), \(percent) percent remaining")
+        .accessibilityLabel(isStale ? "\(provider), last known quota \(percent) percent remaining" : "\(provider), \(percent) percent remaining")
     }
 
     private func settingsHoverChanged(_ inside: Bool) {
@@ -568,7 +585,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                     async let codex = Task.detached(priority: .utility) {
                         var status = ProviderStatus("Codex", executable: "codex")
                         let result = CodexQuota.read(status: &status)
-                        status.quotaAvailable = (try? result.get()) != nil
+                        if case .failure(.apiProfile) = result { status.authorization = "API profile" }
                         return (result, status)
                     }.value
                     async let antigravity = Task.detached(priority: .utility) {
@@ -591,19 +608,16 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                     if !state.fullDemo {
                         switch codexResult {
                         case .success(let quota):
-                            state.codexQuota = quota
                             state.quotaStatus = "\(quota.label) · \(quota.remaining)% remaining"
                         case .failure(let error):
-                            state.codexQuota = nil
                             state.quotaStatus = error.rawValue
                         }
-                        state.antigravityQuota = antigravityResult
-                        state.claudeQuota = claudeResult
-                        state.grokQuota = grokResult
-                        state.openCodeGoQuota = openCodeGoResult
-                        state.kimiQuota = kimiResult
-                        state.providerStatuses = [claudeStatus, codexStatus, antigravityStatus,
-                                                  grokStatus, openCodeGoStatus, kimiStatus]
+                        state.codexSnapshot.update(try? codexResult.get(), status: codexStatus)
+                        state.antigravitySnapshot.update(antigravityResult, status: antigravityStatus)
+                        state.claudeSnapshot.update(claudeResult, status: claudeStatus)
+                        state.grokSnapshot.update(grokResult, status: grokStatus)
+                        state.openCodeGoSnapshot.update(openCodeGoResult, status: openCodeGoStatus)
+                        state.kimiSnapshot.update(kimiResult, status: kimiStatus)
                         state.nextQuotaRefresh = Date().addingTimeInterval(60)
                     }
                 }
