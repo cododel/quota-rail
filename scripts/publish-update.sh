@@ -30,7 +30,12 @@ PY
 fi
 
 if ! gh release view "$tag" --repo "$repo" >/dev/null; then
-  gh release create "$tag" "$directory/$archive" --repo "$repo" --verify-tag --generate-notes
+  notes="docs/releases/$tag.md"
+  if [[ ! -s "$notes" ]] || ! grep -q '[^[:space:]]' "$notes"; then
+    echo "Missing release notes: $notes. Commit them before tagging $tag." >&2
+    exit 1
+  fi
+  gh release create "$tag" "$directory/$archive" --repo "$repo" --verify-tag --notes-file "$notes"
 fi
 gh api "repos/$repo/releases/tags/$tag" --jq '.draft == false and .prerelease == false' | grep -qx true
 curl -fsSL --max-time 120 --retry 3 "https://github.com/$repo/releases/download/$tag/$archive" -o "$stage/$archive"

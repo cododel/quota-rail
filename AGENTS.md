@@ -5,6 +5,7 @@ Quota Rail is a standalone native macOS application. Read the
 [engineering guidelines](docs/GUIDELINES.md) before changing behavior. See
 [session review](docs/DEVELOPMENT_REVIEW.md) for the development lessons behind these rules.
 The [README](README.md) owns installation and development entry points.
+Before preparing a release, follow the [release notes guide](docs/RELEASING.md).
 
 ## Scope and working copy
 
