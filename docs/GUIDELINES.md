@@ -4,61 +4,22 @@ These are the accepted Quota Rail behaviors to preserve. They describe the produ
 not a claim that every scenario has been tested. Development evidence and superseded
 experiments are summarized in [the session review](DEVELOPMENT_REVIEW.md).
 
-## Native, unobtrusive interaction
+## Design ownership and implementation safeguards
 
-- Quota Rail is a standalone Swift/AppKit/SwiftUI overlay at the right screen edge.
-  It remains available across macOS Spaces, including fullscreen application spaces.
-- Hover reveals the panel; clicking a subscription opens its details rather than
-  enlarging the rail again. An open popover or the keep-visible setting holds it open.
-- The collapsed activation region is 3 pt wide by 48 pt high. Check actual pointer
-  coordinates: changing a clipping or content shape alone is not sufficient evidence
-  that the activation region changed. Expanded interaction includes the whole panel.
-- A second click on the active ring or gear closes its popover exactly once, without
-  blinking or reopening. Outside clicks, including clicks in another application,
-  close details and settings. Clicks inside the popover remain usable; Escape closes it.
-- Give dismissal a single state owner. A nonactivating panel cannot rely on application
-  blur alone. Avoid an outside-dismiss handler and a button toggle both handling the
-  same anchor click as independent state changes.
-- Measure finite, bounded popover content before positioning. Show the native window
-  outside the SwiftUI layout update. Anchor the arrow to the selected ring or gear,
-  independently of animated row offsets. Constrain the entire settings content, not
-  just its subscription list, so flexible dividers cannot expand it to screen width.
+[DESIGN.md](DESIGN.md) owns the concept, geometry, color palette, motion, typography,
+component states and visual acceptance criteria. Keep design changes there rather than
+copying tokens into this document. The following safeguards protect those interactions:
 
-## Geometry and visual hierarchy
-
-- Dimensions are macOS logical points, not Retina backing pixels. Keep the expanded
-  rail 40 pt wide. Balance space around each ring and its percentage as one group.
-- Preserve the smoothly joined silhouette. The settings arc and disk share the center
-  of the lower concave bend. A precise drawing must derive from the rendered geometry;
-  generated reference images are visual studies, not measurement authorities.
-- Use recognizable provider logos without background tiles. Match their optical size
-  and weight; equal bounding boxes do not ensure equal apparent size. Codex uses the
-  GPT mark; Antigravity has its own mark rather than Gemini's.
-- Additional visible subscriptions extend the rail vertically without shrinking rings
-  or tightening spacing. Preserve support for all six current connectors. Before
-  adding more, verify window bounds and settings access; do not assume unbounded capacity.
-- Low background contrast adds a 1 pt light-gray outline: panel opacity 20%, settings
-  arc and disk opacity 15%. Keep contrast diagnostics out of normal settings. Any
-  screen-access request must explain adaptive outlines, not imply quota measurement.
-
-## Motion
-
-- `OverlayMotion.swift` owns the shared curve and duration presets. The accepted curve
-  is `cubic-bezier(0.22, 0, 0.18, 1)`. Reuse its named transitions rather than introducing
-  unrelated springs or easing constants in views.
-- At startup, a 6 × 6 pt dot begins beyond the screen edge, emerges 3 pt onto the screen,
-  then morphs into the compact island (approximately 24 pt high). Hover becomes active
-  after entrance finishes. The current entrance phases are 420 ms and 580 ms.
-- Animate the contour and coordinated content movement. Do not scale the whole rail
-  and its rings, or reveal otherwise stationary rings solely with a mask. Rings retain
-  full size and move into place, clipped by the animated contour, without a ring fade.
-- At rest, settings is a radial arc fitted to the lower bend. Hover grows it into the
-  disk. Scale the gear with the disk and use a short fade so it does not become a tiny
-  static glyph inside a growing circle.
-- Settings hover/click is enabled only after the rail fully expands, and disabled as
-  soon as collapse starts. Apply the 50 ms settings-hover delay only then; cancel it
-  when the pointer leaves. Obsolete animation completions must not re-enable controls.
-- Respect Reduce Motion while preserving final geometry and interaction availability.
+- Check actual pointer coordinates; clipping or content shape changes alone do not prove
+  that the hover activation region changed.
+- Give popover dismissal one state owner. A nonactivating panel cannot rely on app blur
+  alone; outside-dismiss and anchor-toggle handlers must not independently invert state.
+- Measure finite, bounded content before positioning, and present the native window
+  outside the SwiftUI layout update. Constrain the whole settings content, not just its list.
+- Reuse shared geometry, palette and motion owners. Cancel stale hover tasks and ignore
+  obsolete animation completions so controls cannot become active after collapse.
+- Treat generated reference images as visual studies, not measurement authorities.
+  A precise geometry export must derive from the rendered contour.
 
 ## Subscription truth and discovery
 
@@ -71,15 +32,11 @@ experiments are summarized in [the session review](DEVELOPMENT_REVIEW.md).
 - Read structured quota data; do not estimate subscription limits from token counts.
   Preserve returned windows, groups and reset times. Unknown plans stay unknown.
   Invalid or unavailable data must not become a fabricated percentage.
-- In normal mode, settings lists only installed CLIs with a recognized signed-in account.
-  Each row has a checkbox and name on the left, a known plan on the right. Without
-  quota, disable the checkbox and show `No quota`; do not remove the account row.
-- Only enabled subscriptions with valid quota appear as rings. Persist visibility
-  choices. Settings remain reachable when all subscriptions are hidden or unavailable.
-- Details are dense, with restrained typography and width. The ring already emphasizes
-  remaining quota; do not add a large duplicate hero percentage. Keep date and time
-  together, display all available quota windows, and use a list for banked-reset expiries.
-  Show credits only when supported; mark dollar conversions as approximate.
+- In normal mode, settings lists only installed CLIs with a recognized signed-in account,
+  including accounts without quota. Only enabled subscriptions with valid quota appear
+  as rings. Persist visibility choices; follow DESIGN.md for row and empty-state rendering.
+- Preserve all available quota windows and banked-reset expirations for details. Expose
+  credits only when supported, and distinguish an approximate conversion from cash value.
 - Antigravity is one subscription with Gemini and Claude/GPT groups, each with 5h and
   7d windows. Direct Claude and Codex subscriptions stay separate. Grok Build shows
   the shared weekly pool. OpenCode Go and Kimi retain the windows their APIs report.
@@ -129,13 +86,11 @@ experiments are summarized in [the session review](DEVELOPMENT_REVIEW.md).
 ## Acceptance scenarios
 
 Run applicable fixture checks/builds and arrange operator/CI verification for affected
-interactive scenarios. These are acceptance anchors, not claims of past coverage.
+interactive scenarios. Use the [design review checklist](DESIGN.md#review-checklist)
+for UI changes. These are acceptance anchors, not claims of past coverage.
 
 | Change | Check |
 | --- | --- |
-| Hover/motion | Approach inside/outside 3 pt strip; entrance sequence; fast enter/leave; gear during expansion; Reduce Motion |
-| Popovers | Ring and gear repeat click; no blink/reopen; outside-app click; inside interaction; Escape; arrow position and bounded width |
-| Layout | Zero, one, three and all six rings; all hidden; light/dark backgrounds; consistent logo weight; Spaces/fullscreen |
 | Providers | Missing CLI; missing/expired login; unknown plan; empty/malformed response; valid windows; packaged helper lookup |
 | Demo/watcher | Both flags and no flag; stored preference isolation; all connectors; d/r; failed compile retains child; cleanup |
 | Login item | Exact installed build; registration status/logs; failure retry; user-disabled choice; actual sign-out/sign-in separately |

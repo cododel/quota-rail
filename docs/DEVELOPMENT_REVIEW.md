@@ -56,7 +56,8 @@ Research suggestions about caching, stale-data presentation and provider-specifi
 intervals were not a fully agreed refresh policy. Do not promote them into guarantees.
 The Claude demo reset/credit fields were UI examples, not verified provider support.
 
-The current rules live in [AGENTS.md](../AGENTS.md) and [GUIDELINES.md](GUIDELINES.md).
+The current rules live in [AGENTS.md](../AGENTS.md), [DESIGN.md](DESIGN.md) and
+[GUIDELINES.md](GUIDELINES.md).
 This review records their provenance; it is not a second behavior specification or a
 release-readiness report. No raw transcript, private account values or machine paths
 are needed in repository documentation.

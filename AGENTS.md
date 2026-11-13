@@ -1,7 +1,8 @@
 # Quota Rail agent guide
 
-Quota Rail is a standalone native macOS application. Read
-[product guidelines](docs/GUIDELINES.md) before changing behavior. See
+Quota Rail is a standalone native macOS application. Read the
+[design specification](docs/DESIGN.md) for visual and interaction work and
+[engineering guidelines](docs/GUIDELINES.md) before changing behavior. See
 [session review](docs/DEVELOPMENT_REVIEW.md) for the development lessons behind these rules.
 The [README](README.md) owns installation and development entry points.
 
@@ -43,7 +44,7 @@ The [README](README.md) owns installation and development entry points.
 - Extend parser checks for changed formats and empty/error responses. Use fabricated,
   sanitized fixtures. Preserve existing successful cases.
 - For geometry and interaction work, provide the operator with the affected scenarios
-  from `docs/GUIDELINES.md`. Do not run local automated E2E tests; leave E2E to the
+  from `docs/DESIGN.md`. Do not run local automated E2E tests; leave E2E to the
   operator or existing CI. Compilation is not visual acceptance.
 - Report separately: static checks, build, fixture tests, live provider reads, observed
   UI behavior and operator confirmation. A failed UI tool is a verification gap, not a pass.
@@ -64,6 +65,7 @@ The [README](README.md) owns installation and development entry points.
 | Panel, view state, hover, settings, quota refresh orchestration | `main.swift` |
 | Contour dimensions and drawing export | `OverlayGeometry.swift` and `EdgeShape` in `main.swift` |
 | Shared animation curve and durations | `OverlayMotion.swift` |
+| Remaining-quota colors and soft thresholds | `QuotaPalette.swift` |
 | Popover measurement, anchoring and dismissal | `IndicatorPopover.swift` (`RailPopover`) |
 | Installation/account/plan/quota status | `ProviderStatus.swift` |
 | Live/demo subscription composition | `OverlaySubscription.swift` |

@@ -43,7 +43,8 @@ Click a ring to see its quota windows and reset times. In the gear menu, choose 
 
 ## Development
 
-Read the [agent guide](AGENTS.md), [product guidelines](docs/GUIDELINES.md), and
+Read the [design specification](docs/DESIGN.md), [agent guide](AGENTS.md),
+[engineering guidelines](docs/GUIDELINES.md), and
 [development session review](docs/DEVELOPMENT_REVIEW.md) before changing behavior.
 
 Run the Swift watcher from the repository with Bun and the Xcode command line tools installed:
