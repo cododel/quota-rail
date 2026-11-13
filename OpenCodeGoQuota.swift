@@ -11,16 +11,11 @@ enum OpenCodeGoQuota {
         let dataHome = ProcessInfo.processInfo.environment["XDG_DATA_HOME"]
         let roots = [dataHome, home.appendingPathComponent("Library/Application Support").path,
                      home.appendingPathComponent(".local/share").path]
-        let key = roots.compactMap { root -> String? in
+        let paths = roots.compactMap { root -> URL? in
             guard let root, root.hasPrefix("/") else { return nil }
-            let path = URL(fileURLWithPath: root).appendingPathComponent("opencode/auth.json")
-            guard let data = try? Data(contentsOf: path),
-                  let entries = try? JSONDecoder().decode([String: Credential].self, from: data),
-                  let key = entries["opencode-go"]?.key?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !key.isEmpty else { return nil }
-            return key
-        }.first
-        guard let key else { return nil }
+            return URL(fileURLWithPath: root).appendingPathComponent("opencode/auth.json")
+        }
+        guard let key = readKey(at: paths, status: &status) else { return nil }
         var request = URLRequest(url: URL(string: "https://opencode.ai/zen/go/v1/usage")!, timeoutInterval: 8)
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -38,6 +33,26 @@ enum OpenCodeGoQuota {
             status.subscription = "Go access confirmed"
         }
         return parse(data)
+    }
+
+    static func readKey(at paths: [URL], status: inout ProviderStatus) -> String? {
+        var unreadable = false
+        for path in paths {
+            do {
+                let data = try Data(contentsOf: path)
+                let entries = try JSONDecoder().decode([String: Credential].self, from: data)
+                if let key = entries["opencode-go"]?.key?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !key.isEmpty {
+                    return key
+                }
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+                continue
+            } catch {
+                unreadable = true
+            }
+        }
+        if !unreadable { status.authorization = "Sign-in required" }
+        return nil
     }
 
     static func parse(_ data: Data, now: Date = Date()) -> CodexQuota? {

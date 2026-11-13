@@ -53,8 +53,8 @@ enum GrokQuota {
         let directory = ProcessInfo.processInfo.environment["GROK_HOME"]
             .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
             ?? home.appendingPathComponent(".grok", isDirectory: true)
-        guard let data = try? Data(contentsOf: directory.appendingPathComponent("auth.json")),
-              let token = accessToken(from: data) else { return nil }
+        guard let token = readAccessToken(at: directory.appendingPathComponent("auth.json"),
+                                          status: &status) else { return nil }
 
         let url = URL(string: "https://cli-chat-proxy.grok.com/v1/billing?format=credits")!
         var request = URLRequest(url: url, timeoutInterval: 8)
@@ -79,8 +79,27 @@ enum GrokQuota {
         return parse(payload)
     }
 
+    static func readAccessToken(at path: URL, status: inout ProviderStatus) -> String? {
+        do {
+            let data = try Data(contentsOf: path)
+            let credentials = try JSONDecoder().decode([String: Credential].self, from: data)
+            let token = accessToken(from: credentials)
+            if token == nil { status.authorization = "Sign-in required" }
+            return token
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            status.authorization = "Sign-in required"
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
     static func accessToken(from data: Data) -> String? {
         guard let credentials = try? JSONDecoder().decode([String: Credential].self, from: data) else { return nil }
+        return accessToken(from: credentials)
+    }
+
+    private static func accessToken(from credentials: [String: Credential]) -> String? {
         return credentials.values
             .filter { $0.auth_mode == "oidc" && $0.key?.isEmpty == false }
             .max { $0.expiration < $1.expiration }?.key

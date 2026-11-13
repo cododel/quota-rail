@@ -132,6 +132,7 @@ struct CodexQuota: Sendable {
             let auth = try request(2, "account/read", ["refreshToken": false])
             guard let account = auth["account"] as? [String: Any] else {
                 if auth["requiresOpenaiAuth"] as? Bool == false { return .failure(.apiProfile) }
+                guard auth["account"] is NSNull else { return .failure(.unavailable) }
                 status.authorization = "Signed out"
                 return .failure(.signedOut)
             }

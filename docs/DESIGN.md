@@ -300,8 +300,11 @@ between major sections. Subscription rows are 20 pt high with 4 pt spacing. The 
 may scroll; the panel must not expand horizontally for a long plan name.
 
 Each row contains a checkbox and provider name on the left, a known plan on the right.
-An unknown plan leaves that space blank. With an account but no quota, show **No quota**
-and disable the checkbox. Keep protocol/install/auth diagnostics out of this normal UI.
+An unknown plan leaves that space blank when quota is available. Without quota, disable
+the checkbox and show **Sign-in required** for an explicit sign-in failure or **No quota**
+otherwise. Show **Stale** while displaying a retained quota. List providers with quota
+first in the rail order, including hidden providers in their saved slots. Follow them
+with providers without quota, then providers that require sign-in.
 
 The menu also contains **Keep overlay visible**, eligible release update controls,
 conditional demo/screen-access controls, and **Quit** at the bottom after a divider.
@@ -312,8 +315,8 @@ Source previews without bundle version metadata show **Preview** in the same spo
 
 ## Empty, unavailable and demonstration states
 
-- While checking, settings says **Checking providers…**. If no signed-in CLI is found,
-  it says **No signed-in CLIs found**. An account with no quota remains a disabled row.
+- While checking, settings says **Checking providers…**. If no supported CLI is installed,
+  it says **No supported CLIs found**. An installed CLI with no quota remains a disabled row.
 - With no available quota, the rail shows a neutral dash rather than a fabricated number.
   Hiding all available subscriptions still leaves settings reachable; do not insert mocks.
 - Full demo uses the same shapes, palette, typography and interactions as real data and

@@ -225,10 +225,15 @@ final class OverlayState: ObservableObject {
         UserDefaults.standard.set(order, forKey: orderKey)
     }
 
+    var orderedSubscriptions: [OverlaySubscription] {
+        let available = subscriptions
+        let order = subscriptionOrder
+        let ordered = order.compactMap { id in available.first { $0.id == id } }
+        return ordered + available.filter { !order.contains($0.id) }
+    }
+
     var visibleSubscriptions: [OverlaySubscription] {
-        let visible = subscriptions.filter { isSubscriptionVisible($0.id) }
-        let ordered = subscriptionOrder.compactMap { id in visible.first { $0.id == id } }
-        return ordered + visible.filter { item in !subscriptionOrder.contains(item.id) }
+        orderedSubscriptions.filter { isSubscriptionVisible($0.id) }
     }
 
     func isSubscriptionVisible(_ id: String) -> Bool {
@@ -332,31 +337,31 @@ struct Overlay: View {
                                     .toggleStyle(.checkbox)
                             }
                             Divider()
-                            let signedInProviders = state.providerStatuses.filter(\.showsInSettings)
+                            let installedProviders = ProviderStatus.settingsOrder(state.providerStatuses, quotaOrder: state.orderedSubscriptions.map(\.name))
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Subscriptions")
                                     .font(.system(size: 12, weight: .medium))
                                 ScrollView {
                                     VStack(alignment: .leading, spacing: 4) {
                                         if state.fullDemo {
-                                            ForEach(state.subscriptions) { subscription in
+                                            ForEach(state.orderedSubscriptions) { subscription in
                                                 subscriptionRow(subscription.name, subscription: subscription, detail: nil)
                                             }
                                         } else if state.providerStatuses.isEmpty {
                                             Text("Checking providers…").foregroundStyle(.secondary)
-                                        } else if signedInProviders.isEmpty {
-                                            Text("No signed-in CLIs found").foregroundStyle(.secondary)
+                                        } else if installedProviders.isEmpty {
+                                            Text("No supported CLIs found").foregroundStyle(.secondary)
                                         } else {
-                                            ForEach(signedInProviders, id: \.name) { provider in
+                                            ForEach(installedProviders, id: \.name) { provider in
                                                 let subscription = state.subscriptions.first { $0.name == provider.name }
                                                 subscriptionRow(provider.name, subscription: subscription,
-                                                                detail: subscription == nil ? "No quota" : (provider.quotaAvailable ? provider.planLabel : "Stale"))
+                                                                detail: subscription == nil ? provider.unavailableQuotaLabel : (provider.quotaAvailable ? provider.planLabel : "Stale"))
                                             }
                                         }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .frame(height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : signedInProviders.count) * 24)))
+                                .frame(height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : installedProviders.count) * 24)))
                             }
                             if !state.hasScreenAccess {
                                 Button("Allow Screen Access for Adaptive Outline") {

@@ -8,7 +8,25 @@ struct ProviderStatus: Sendable {
     var quotaAvailable = false
 
     var showsInSettings: Bool {
-        cliInstalled && authorization == "Signed in"
+        cliInstalled
+    }
+
+    var needsSignIn: Bool {
+        switch authorization {
+        case "Signed out", "Sign-in required", "Credentials rejected": true
+        default: false
+        }
+    }
+
+    var unavailableQuotaLabel: String {
+        needsSignIn ? "Sign-in required" : "No quota"
+    }
+
+    static func settingsOrder(_ providers: [Self], quotaOrder: [String]) -> [Self] {
+        let installed = providers.filter(\.showsInSettings)
+        let withQuota = quotaOrder.compactMap { name in installed.first { $0.name == name } }
+        let withoutQuota = installed.filter { !quotaOrder.contains($0.name) }
+        return withQuota + withoutQuota.filter { !$0.needsSignIn } + withoutQuota.filter(\.needsSignIn)
     }
 
     var planLabel: String? {

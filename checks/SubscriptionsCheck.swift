@@ -39,7 +39,7 @@ struct SubscriptionsCheck {
         for provider in ["Claude", "Codex", "Antigravity", "Grok Build", "OpenCode Go", "Kimi"] {
             var snapshot = ProviderQuotaSnapshot<CodexQuota>()
             let installed = ProviderStatus(provider, executable: "sh")
-            precondition(installed.cliInstalled)
+            precondition(installed.showsInSettings && installed.unavailableQuotaLabel == "No quota")
             snapshot.update(nil, status: installed, now: now)
             precondition(snapshot.quota == nil && !snapshot.isStale)
 
@@ -60,13 +60,30 @@ struct SubscriptionsCheck {
                 var revoked = installed
                 revoked.authorization = authorization
                 snapshot.update(nil, status: revoked, now: recovered)
+                precondition(snapshot.status?.showsInSettings == true)
                 precondition(snapshot.quota == nil && snapshot.lastUpdated == nil && !snapshot.isStale)
             }
             snapshot.update(live, status: signedIn, now: now)
             let removed = ProviderStatus(provider, executable: "quota-rail-missing-cli-fixture")
             snapshot.update(nil, status: removed, now: recovered)
+            precondition(snapshot.status?.showsInSettings == false)
             precondition(snapshot.quota == nil && !snapshot.isStale)
         }
+        var free = ProviderStatus("Free provider", executable: "sh")
+        free.authorization = "Signed in"
+        free.subscription = "Free"
+        var freeSnapshot = ProviderQuotaSnapshot<CodexQuota>()
+        freeSnapshot.update(live, status: free, now: now)
+        precondition(freeSnapshot.quota?.remaining == 37 && freeSnapshot.status?.planLabel == "Free")
+        let stale = ProviderStatus("Stale provider", executable: "sh")
+        let unavailable = ProviderStatus("Unavailable provider", executable: "sh")
+        var signedOut = ProviderStatus("Signed-out provider", executable: "sh")
+        signedOut.authorization = "Signed out"
+        let settingsOrder = ProviderStatus.settingsOrder(
+            [signedOut, unavailable, free, stale], quotaOrder: [stale.name, free.name]
+        )
+        precondition(settingsOrder.map(\.name) == [stale.name, free.name, unavailable.name, signedOut.name])
+
         let normal = OverlaySubscription.resolve(codex: live, now: now)
         precondition(normal.count == 1 && !normal[0].isMock && normal[0].quota.remaining == 37)
         let sameQuota = OverlaySubscription.resolve(codex: live, claude: live, grok: live,
@@ -136,6 +153,29 @@ struct SubscriptionsCheck {
              "current":{"auth_mode":"oidc","key":"current","expires_at":"2027-01-20T14:15:30Z"}}
             """.utf8)
         precondition(GrokQuota.accessToken(from: grokCredentials) == "current")
+        do {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let authFile = directory.appendingPathComponent("auth.json")
+            for contents in [nil, "{}", "{invalid"] as [String?] {
+                if let contents { try Data(contents.utf8).write(to: authFile) }
+                let expected = contents == "{invalid" ? "No quota" : "Sign-in required"
+                var grok = ProviderStatus("Grok Build", executable: "sh")
+                var go = ProviderStatus("OpenCode Go", executable: "sh")
+                precondition(GrokQuota.readAccessToken(at: authFile, status: &grok) == nil)
+                precondition(OpenCodeGoQuota.readKey(at: [authFile], status: &go) == nil)
+                precondition(grok.unavailableQuotaLabel == expected && go.unavailableQuotaLabel == expected)
+            }
+            try grokCredentials.write(to: authFile)
+            var grok = ProviderStatus("Grok Build", executable: "sh")
+            precondition(GrokQuota.readAccessToken(at: authFile, status: &grok) == "current")
+            try Data(#"{"opencode-go":{"key":"fixture"}}"#.utf8).write(to: authFile)
+            var go = ProviderStatus("OpenCode Go", executable: "sh")
+            precondition(OpenCodeGoQuota.readKey(at: [authFile], status: &go) == "fixture")
+        } catch {
+            preconditionFailure("Could not prepare authorization fixtures: \(error)")
+        }
         let grokPayload = Data("""
             {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":41,
             "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2027-01-20T14:15:30.192Z"}}}
