@@ -201,8 +201,34 @@ final class OverlayState: ObservableObject {
         UserDefaults.standard.stringArray(forKey: OverlayState.hiddenSubscriptionsKey) ?? []
     )
 
+    private var orderKey: String {
+        fullDemo ? "projector.overlay.demoSubscriptionOrder" : "projector.overlay.subscriptionOrder"
+    }
+    @Published private var subscriptionOrders: [String: [String]] = [:]
+
+    private var subscriptionOrder: [String] {
+        subscriptionOrders[orderKey] ?? UserDefaults.standard.stringArray(forKey: orderKey) ?? []
+    }
+
+    func rememberSubscriptions(_ ids: [String]) {
+        let order = subscriptionOrder
+        let updated = order + ids.filter { !order.contains($0) }
+        if updated != order { saveSubscriptionOrder(updated) }
+    }
+
+    func reorderSubscriptions(_ visibleIDs: [String]) {
+        saveSubscriptionOrder(OverlaySubscription.replacingVisibleOrder(subscriptionOrder, with: visibleIDs))
+    }
+
+    private func saveSubscriptionOrder(_ order: [String]) {
+        subscriptionOrders[orderKey] = order
+        UserDefaults.standard.set(order, forKey: orderKey)
+    }
+
     var visibleSubscriptions: [OverlaySubscription] {
-        subscriptions.filter { isSubscriptionVisible($0.id) }
+        let visible = subscriptions.filter { isSubscriptionVisible($0.id) }
+        let ordered = subscriptionOrder.compactMap { id in visible.first { $0.id == id } }
+        return ordered + visible.filter { item in !subscriptionOrder.contains(item.id) }
     }
 
     func isSubscriptionVisible(_ id: String) -> Bool {
@@ -237,6 +263,11 @@ struct Overlay: View {
     @State private var appearance: CGFloat = 0
     @State private var entryOffset: CGFloat = 3
     @State private var appearanceComplete = false
+    @GestureState private var trackingRing = false
+    @State private var draggedID: String?
+    @State private var dragOffset: CGFloat = 0
+    @State private var proposedOrder: [String] = []
+    private let rowPitch: CGFloat = 54
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var state: OverlayState
 
@@ -252,7 +283,7 @@ struct Overlay: View {
                 .overlay(alignment: .trailing) {
                     ZStack {
                         ForEach(Array(state.visibleSubscriptions.enumerated()), id: \.element.id) { index, subscription in
-                            movingMeter(subscription, row: CGFloat(index) - CGFloat(state.visibleSubscriptions.count - 1) / 2)
+                            movingMeter(subscription, index: index)
                         }
                         if state.subscriptions.isEmpty {
                             Text("—").font(.system(size: 12))
@@ -260,7 +291,8 @@ struct Overlay: View {
                                 .accessibilityLabel(state.quotaStatus)
                         }
                     }
-                    .frame(width: 40)
+                    .frame(width: 40, height: 44)
+                    .coordinateSpace(name: "quotaRailRows")
                 }
                 .clipShape(contour)
                 .overlay {
@@ -392,6 +424,19 @@ struct Overlay: View {
                 hoverChanged(false)
             }
         }
+        .onChange(of: state.subscriptions.map(\.id), initial: true) { _, ids in
+            state.rememberSubscriptions(ids)
+        }
+        .onChange(of: state.fullDemo) { _, _ in
+            state.rememberSubscriptions(state.subscriptions.map(\.id))
+            finishDrag(commit: false)
+        }
+        .onChange(of: state.visibleSubscriptions.map(\.id)) { _, ids in
+            if draggedID != nil && Set(ids) != Set(proposedOrder) { finishDrag(commit: false) }
+        }
+        .onChange(of: trackingRing) { _, tracking in
+            if !tracking { finishDrag(commit: false) }
+        }
         .onDisappear {
             state.closeTask?.cancel()
             settingsHoverChanged(false)
@@ -436,16 +481,66 @@ struct Overlay: View {
         .frame(height: 20)
     }
 
-    private func movingMeter(_ subscription: OverlaySubscription, row: CGFloat) -> some View {
-        let staleSince = state.staleQuotaDate(for: subscription.name)
-        return Button {
-            state.settings = false
-            state.selectedSubscription = state.selectedSubscription == subscription.id ? nil : subscription.id
-        } label: {
-            meter(subscription.quota.remaining, color: subscription.color, provider: subscription.name, mark: subscription.id, isStale: staleSince != nil)
-                .contentShape(Rectangle())
+    private func toggleDetails(_ id: String) {
+        guard state.expanded else { return }
+        state.settings = false
+        state.selectedSubscription = state.selectedSubscription == id ? nil : id
+    }
+
+    private func finishDrag(commit: Bool) {
+        guard draggedID != nil else { return }
+        withAnimation(reduceMotion ? nil : OverlayMotion.reorder) {
+            if commit { state.reorderSubscriptions(proposedOrder) }
+            draggedID = nil
+            proposedOrder = []
+            dragOffset = 0
         }
-            .buttonStyle(.plain)
+        scheduleCloseIfOutside()
+    }
+
+    private func ringGesture(_ id: String, row: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("quotaRailRows"))
+            .updating($trackingRing) { _, tracking, _ in tracking = true }
+            .onChanged { value in
+                let ids = state.visibleSubscriptions.map(\.id)
+                guard state.expanded, ids.count > 1, let index = ids.firstIndex(of: id),
+                      abs(value.translation.height) >= 5 || draggedID == id
+                else { return }
+                if draggedID == nil {
+                    let startY = value.startLocation.y - row * rowPitch
+                    guard (0...26).contains(startY) else { return }
+                    draggedID = id
+                    state.closeTask?.cancel()
+                    state.settings = false
+                    state.selectedSubscription = nil
+                }
+                guard draggedID == id else { return }
+                let position = min(CGFloat(ids.count - 1), max(0, CGFloat(index) + value.translation.height / rowPitch))
+                dragOffset = (position - CGFloat(index)) * rowPitch
+                let target = Int(position.rounded())
+                withAnimation(reduceMotion ? nil : OverlayMotion.reorder) {
+                    proposedOrder = OverlaySubscription.moving(id, to: target, in: ids)
+                }
+            }
+            .onEnded { value in
+                if draggedID == id {
+                    finishDrag(commit: true)
+                } else if hypot(value.translation.width, value.translation.height) < 5 {
+                    toggleDetails(id)
+                }
+            }
+    }
+
+    private func movingMeter(_ subscription: OverlaySubscription, index: Int) -> some View {
+        let staleSince = state.staleQuotaDate(for: subscription.name)
+        let dragging = draggedID == subscription.id
+        let slot = dragging ? index : proposedOrder.firstIndex(of: subscription.id) ?? index
+        let row = CGFloat(slot) - CGFloat(state.visibleSubscriptions.count - 1) / 2
+        return meter(subscription.quota.remaining, color: subscription.color, provider: subscription.name, mark: subscription.id, isStale: staleSince != nil)
+            .contentShape(Rectangle())
+            .gesture(ringGesture(subscription.id, row: CGFloat(index) - CGFloat(state.visibleSubscriptions.count - 1) / 2))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { toggleDetails(subscription.id) }
             .allowsHitTesting(state.expanded)
             .background {
                 RailPopover(isPresented: state.selectedSubscription == subscription.id, anchorInsetFromTop: 13) {
@@ -459,8 +554,9 @@ struct Overlay: View {
             }
             .offset(
                 x: state.expanded ? 0 : 48,
-                y: row * (state.expanded ? 54 : 8)
+                y: row * (state.expanded ? rowPitch : 8) + (dragging ? dragOffset : 0)
             )
+            .zIndex(dragging ? 1 : 0)
             .animation(
                 reduceMotion ? nil : (state.expanded ? OverlayMotion.expand : OverlayMotion.collapse),
                 value: state.expanded
@@ -544,7 +640,7 @@ struct Overlay: View {
         state.closeTask?.cancel()
         state.closeTask = Task { @MainActor in
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-            guard !state.hovering, !state.settingsHovered, !state.pinned, !state.settings, state.selectedSubscription == nil else { return }
+            guard draggedID == nil, !state.hovering, !state.settingsHovered, !state.pinned, !state.settings, state.selectedSubscription == nil else { return }
             state.settingsHoverEnabled = false
             settingsHoverChanged(false)
             withAnimation(reduceMotion ? nil : OverlayMotion.collapse) { state.expanded = false }

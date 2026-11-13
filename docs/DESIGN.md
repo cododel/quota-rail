@@ -196,6 +196,10 @@ stateDiagram-v2
 ```
 
 - Hover reveals the rail. A ring click opens details without further widening the rail.
+- Drag a ring vertically in the expanded rail to reorder subscriptions. Close popovers
+  when dragging starts, keep the rail expanded, and animate neighboring rows into their
+  new slots. A click still toggles details. Save the order on drop, preserving hidden
+  slots and appending newly discovered subscriptions. Demo and live orders are separate.
 - Opening settings closes details; selecting a ring closes settings. Only one popover
   is active. Selecting another ring moves the detail context to that subscription.
 - A repeat click closes the active popover once, without a flash or immediate reopening.

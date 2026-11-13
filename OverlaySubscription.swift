@@ -104,3 +104,22 @@ struct OverlaySubscription: Identifiable {
         }
     }
 }
+
+extension OverlaySubscription {
+    static func moving(_ id: String, to index: Int, in order: [String]) -> [String] {
+        guard order.indices.contains(index), let source = order.firstIndex(of: id) else { return order }
+        var updated = order
+        updated.remove(at: source)
+        updated.insert(id, at: index)
+        return updated
+    }
+
+    static func replacingVisibleOrder(_ order: [String], with visible: [String]) -> [String] {
+        let visibleIDs = Set(visible)
+        var replacements = visible.makeIterator()
+        let complete = order + visible.filter { !order.contains($0) }
+        return complete.map { id in
+            visibleIDs.contains(id) ? replacements.next() ?? id : id
+        }
+    }
+}

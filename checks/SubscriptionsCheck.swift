@@ -4,6 +4,13 @@ import SwiftUI
 @main
 struct SubscriptionsCheck {
     static func main() {
+        let visibleOrder = OverlaySubscription.moving("grok", to: 0, in: ["codex", "gemini", "grok"])
+        precondition(visibleOrder == ["grok", "codex", "gemini"])
+        precondition(OverlaySubscription.moving("grok", to: 2, in: visibleOrder) == ["codex", "gemini", "grok"])
+        precondition(OverlaySubscription.replacingVisibleOrder(
+            ["codex", "claude", "gemini", "grok"], with: visibleOrder
+        ) == ["grok", "claude", "codex", "gemini"])
+
         func rgb(_ red: Double, _ green: Double, _ blue: Double) -> Color {
             Color(.sRGB, red: red / 255, green: green / 255, blue: blue / 255, opacity: 1)
         }
