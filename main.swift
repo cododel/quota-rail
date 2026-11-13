@@ -15,9 +15,10 @@ enum HarnessImages {
 struct EdgeShape: Shape {
     var progress: CGFloat
     var bodyHeight: CGFloat = OverlayGeometry.bodyHeight
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
+    var appearance: CGFloat = 1
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(progress, appearance) }
+        set { progress = newValue.first; appearance = newValue.second }
     }
 
     func path(in rect: CGRect) -> Path {
@@ -25,20 +26,22 @@ struct EdgeShape: Shape {
         let depthProgress = 1 - pow(1 - progress, 2)
         let heightProgress = progress * progress
         let depth = max(3, 3 + (OverlayGeometry.width - 3) * depthProgress)
-        let span = max(20, 24 + (bodyHeight - 24) * heightProgress)
+        let span = 6 + (24 + (bodyHeight - 24) * heightProgress - 6) * appearance
         let x = rect.maxX
         let y = rect.midY
         let left = x - depth
         let top = y - span / 2
         let bottom = y + span / 2
-        let radius = min(depth / 2, span / 4)
+        let radius = 3 + (min(depth / 2, span / 4) - 3) * appearance
         let control = radius * OverlayGeometry.quarterCircleControl
+        let flare = radius * appearance
+        let flareControl = control * appearance
         var path = Path()
-        path.move(to: CGPoint(x: x, y: top - radius))
+        path.move(to: CGPoint(x: x, y: top - flare))
         path.addCurve(
-            to: CGPoint(x: x - radius, y: top),
-            control1: CGPoint(x: x, y: top - radius + control),
-            control2: CGPoint(x: x - radius + control, y: top)
+            to: CGPoint(x: x - flare, y: top),
+            control1: CGPoint(x: x, y: top - flare + flareControl),
+            control2: CGPoint(x: x - flare + flareControl, y: top)
         )
         path.addLine(to: CGPoint(x: left + radius, y: top))
         path.addCurve(
@@ -52,11 +55,11 @@ struct EdgeShape: Shape {
             control1: CGPoint(x: left, y: bottom - radius + control),
             control2: CGPoint(x: left + radius - control, y: bottom)
         )
-        path.addLine(to: CGPoint(x: x - radius, y: bottom))
+        path.addLine(to: CGPoint(x: x - flare, y: bottom))
         path.addCurve(
-            to: CGPoint(x: x, y: bottom + radius),
-            control1: CGPoint(x: x - radius + control, y: bottom),
-            control2: CGPoint(x: x, y: bottom + radius - control)
+            to: CGPoint(x: x, y: bottom + flare),
+            control1: CGPoint(x: x - flare + flareControl, y: bottom),
+            control2: CGPoint(x: x, y: bottom + flare - flareControl)
         )
         path.closeSubpath()
         return path
@@ -112,7 +115,7 @@ struct SettingsGlyph: View, Animatable {
                         .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round))
                         .stroke(Color(white: 0.85).opacity(0.15), lineWidth: 1)
                         .opacity(borderVisible ? 1 : 0)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: borderVisible)
+                        .animation(reduceMotion ? nil : OverlayMotion.outline, value: borderVisible)
                         .allowsHitTesting(false)
                 }
                 .rotationEffect(.degrees(-90))
@@ -131,7 +134,7 @@ struct SettingsGlyph: View, Animatable {
                     SettingsReveal(progress: amount)
                         .stroke(Color(white: 0.85).opacity(0.15), lineWidth: 1)
                         .opacity(borderVisible ? amount : 0)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: borderVisible)
+                        .animation(reduceMotion ? nil : OverlayMotion.outline, value: borderVisible)
                         .allowsHitTesting(false)
                 }
         }
@@ -215,19 +218,20 @@ final class OverlayState: ObservableObject {
 }
 
 struct Overlay: View {
+    @State private var appearance: CGFloat = 0
+    @State private var entryOffset: CGFloat = 3
+    @State private var appearanceComplete = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var state: OverlayState
 
-    // Springs adapted from boring.notch for a smaller, pointer-driven panel.
-    private let openSpring = Animation.spring(response: 0.38, dampingFraction: 0.9, blendDuration: 0)
-    private let closeSpring = Animation.spring(response: 0.34, dampingFraction: 1.0, blendDuration: 0)
 
     private var extraHeight: CGFloat { CGFloat(max(0, state.visibleSubscriptions.count - 3)) * 54 }
 
     var body: some View {
         ZStack(alignment: .trailing) {
             let contour = EdgeShape(progress: state.expanded ? 1 : 0,
-                                    bodyHeight: OverlayGeometry.bodyHeight + extraHeight)
+                                    bodyHeight: OverlayGeometry.bodyHeight + extraHeight,
+                                    appearance: appearance)
             Rectangle().fill(.black)
                 .overlay(alignment: .trailing) {
                     ZStack {
@@ -246,9 +250,10 @@ struct Overlay: View {
                 .overlay {
                     contour.stroke(Color(white: 0.85).opacity(0.20), lineWidth: 1)
                         .opacity(state.borderVisible ? 1 : 0)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: state.borderVisible)
+                        .animation(reduceMotion ? nil : OverlayMotion.outline, value: state.borderVisible)
                         .allowsHitTesting(false)
                 }
+                .offset(x: entryOffset)
                 .accessibilityHidden(!state.expanded)
             Button {
                     state.selectedSubscription = nil
@@ -256,7 +261,7 @@ struct Overlay: View {
                 } label: {
                     SettingsGlyph(borderVisible: state.borderVisible, progress: settingsExpanded ? 1 : 0)
                     .animation(
-                        reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.9),
+                        reduceMotion ? nil : OverlayMotion.settings,
                         value: settingsExpanded
                     )
                 }
@@ -323,7 +328,7 @@ struct Overlay: View {
                 .padding(.trailing, 0)
                 .offset(x: state.expanded ? 0 : 52, y: state.expanded ? OverlayGeometry.settingsCenterY + extraHeight / 2 : 20)
                 .animation(
-                    reduceMotion ? nil : .spring(response: state.expanded ? 0.44 : 0.32, dampingFraction: 0.95),
+                    reduceMotion ? nil : (state.expanded ? OverlayMotion.expand : OverlayMotion.collapse),
                     value: state.expanded
                 )
                 .allowsHitTesting(state.settingsHoverEnabled)
@@ -332,6 +337,23 @@ struct Overlay: View {
         .foregroundStyle(.white)
         .frame(width: 48, height: OverlayGeometry.panelHeight, alignment: .trailing)
         .clipped()
+        .task {
+            if reduceMotion {
+                entryOffset = 0
+                appearance = 1
+                appearanceComplete = true
+                return
+            }
+            withAnimation(OverlayMotion.enter, completionCriteria: .removed) {
+                entryOffset = 0
+            } completion: {
+                withAnimation(OverlayMotion.unfold, completionCriteria: .removed) {
+                    appearance = 1
+                } completion: {
+                    appearanceComplete = true
+                }
+            }
+        }
         .contentShape(HoverRegion(expanded: state.expanded))
         .onContinuousHover { phase in
             switch phase {
@@ -412,10 +434,7 @@ struct Overlay: View {
                 y: row * (state.expanded ? 54 : 8)
             )
             .animation(
-                reduceMotion ? nil : .spring(
-                    response: state.expanded ? 0.42 + Double(abs(row)) * 0.02 : 0.32,
-                    dampingFraction: state.expanded ? 0.94 : 1
-                ),
+                reduceMotion ? nil : (state.expanded ? OverlayMotion.expand : OverlayMotion.collapse),
                 value: state.expanded
             )
     }
@@ -473,6 +492,7 @@ struct Overlay: View {
     }
 
     private func hoverChanged(_ inside: Bool) {
+        guard appearanceComplete else { return }
         guard state.hovering != inside else { return }
         state.hovering = inside
         state.closeTask?.cancel()
@@ -480,7 +500,7 @@ struct Overlay: View {
             guard !state.expanded else { return }
             let expansionID = UUID()
             state.expansionID = expansionID
-            withAnimation(reduceMotion ? nil : openSpring, completionCriteria: .removed) {
+            withAnimation(reduceMotion ? nil : OverlayMotion.expand, completionCriteria: .removed) {
                 state.expanded = true
             } completion: {
                 guard state.expanded, state.expansionID == expansionID else { return }
@@ -498,7 +518,7 @@ struct Overlay: View {
             guard !state.hovering, !state.settingsHovered, !state.pinned, !state.settings, state.selectedSubscription == nil else { return }
             state.settingsHoverEnabled = false
             settingsHoverChanged(false)
-            withAnimation(reduceMotion ? nil : closeSpring) { state.expanded = false }
+            withAnimation(reduceMotion ? nil : OverlayMotion.collapse) { state.expanded = false }
         }
     }
 }
