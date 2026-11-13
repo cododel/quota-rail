@@ -12,4 +12,5 @@ enum OverlayMotion {
     static let collapse = curve(duration: 0.36)
     static let settings = curve(duration: 0.36)
     static let outline = curve(duration: 0.2)
+    static let quota = curve(duration: 0.36)
 }

@@ -3,7 +3,7 @@ import SwiftUI
 struct OverlaySubscription: Identifiable {
     let id: String
     let name: String
-    let color: Color
+    var color: Color { QuotaPalette.color(remaining: quota.remaining) }
     let quota: CodexQuota
     let isMock: Bool
     var limitGroups: [LimitGroup] = []
@@ -18,35 +18,35 @@ struct OverlaySubscription: Identifiable {
         if !fullDemo {
             var live: [Self] = []
             if let claude {
-                live.append(Self(id: "claude", name: "Claude", color: .orange, quota: claude, isMock: false))
+                live.append(Self(id: "claude", name: "Claude", quota: claude, isMock: false))
             }
             if let codex {
-                live.append(Self(id: "codex", name: "Codex", color: .mint, quota: codex, isMock: false))
+                live.append(Self(id: "codex", name: "Codex", quota: codex, isMock: false))
             }
             if let antigravity {
-                live.append(Self(id: "gemini", name: "Antigravity", color: .yellow,
+                live.append(Self(id: "gemini", name: "Antigravity",
                     quota: antigravity.gemini, isMock: false, limitGroups: [
                         LimitGroup(id: "gemini", name: "Gemini", windows: antigravity.gemini.windows),
                         LimitGroup(id: "claude-gpt", name: "Claude/GPT", windows: antigravity.thirdParty.windows)
                     ]))
             }
             if let grok {
-                live.append(Self(id: "grok", name: "Grok Build", color: .cyan, quota: grok, isMock: false))
+                live.append(Self(id: "grok", name: "Grok Build", quota: grok, isMock: false))
             }
             if let openCodeGo {
-                live.append(Self(id: "opencode-go", name: "OpenCode Go", color: .purple, quota: openCodeGo, isMock: false))
+                live.append(Self(id: "opencode-go", name: "OpenCode Go", quota: openCodeGo, isMock: false))
             }
             if let kimi {
-                live.append(Self(id: "kimi", name: "Kimi", color: .blue, quota: kimi, isMock: false))
+                live.append(Self(id: "kimi", name: "Kimi", quota: kimi, isMock: false))
             }
             return live
         }
-        let examples: [(String, String, Color, Int, Int, Int, [Int])] = [
-            ("claude", "Claude", .orange, 73, 300, 2_450, [2]),
-            ("codex", "Codex", .mint, 21, 10_080, 12_800, [4, 11, 21]),
-            ("gemini", "Antigravity", .yellow, 52, 300, 0, []),
+        let examples: [(String, String, Int, Int, Int, [Int])] = [
+            ("claude", "Claude", 73, 300, 2_450, [2]),
+            ("codex", "Codex", 21, 10_080, 12_800, [4, 11, 21]),
+            ("gemini", "Antigravity", 52, 300, 0, []),
         ]
-        let demo = examples.map { id, name, color, remaining, window, balance, expirationDays in
+        let demo = examples.map { id, name, remaining, window, balance, expirationDays in
             // UI fixtures only; these fields do not imply provider API capabilities or pricing.
             let resets = expirationDays.enumerated().map { index, days in
                 CodexQuota.ResetCredit(
@@ -77,18 +77,18 @@ struct OverlaySubscription: Identifiable {
                         reset: now.addingTimeInterval(410_400))
                 ])
             ] : []
-            return Self(id: id, name: name, color: color, quota: quota, isMock: true, limitGroups: groups)
+            return Self(id: id, name: name, quota: quota, isMock: true, limitGroups: groups)
         }
-        let additional: [(id: String, name: String, color: Color, windows: [CodexQuota.LimitWindow])] = [
-            ("grok", "Grok Build", .cyan, [
+        let additional: [(id: String, name: String, windows: [CodexQuota.LimitWindow])] = [
+            ("grok", "Grok Build", [
                 .init(id: "weekly", remaining: 57, minutes: 10_080, reset: now.addingTimeInterval(259_200))
             ]),
-            ("opencode-go", "OpenCode Go", .purple, [
+            ("opencode-go", "OpenCode Go", [
                 .init(id: "rolling", remaining: 76, minutes: 300, reset: now.addingTimeInterval(7_200)),
                 .init(id: "weekly", remaining: 48, minutes: 10_080, reset: now.addingTimeInterval(432_000)),
                 .init(id: "monthly", remaining: 62, minutes: nil, reset: now.addingTimeInterval(1_209_600))
             ]),
-            ("kimi", "Kimi", .blue, [
+            ("kimi", "Kimi", [
                 .init(id: "limit5h", remaining: 84, minutes: 300, reset: now.addingTimeInterval(10_800)),
                 .init(id: "limit7d", remaining: 65, minutes: 10_080, reset: now.addingTimeInterval(345_600))
             ])
@@ -100,7 +100,7 @@ struct OverlaySubscription: Identifiable {
                 resetCredits: nil, availableResets: [], usageCreditBalance: nil, unlimitedUsageCredits: false,
                 primaryWindowID: primary.id, additionalWindows: Array(provider.windows.dropFirst())
             )
-            return Self(id: provider.id, name: provider.name, color: provider.color, quota: quota, isMock: true)
+            return Self(id: provider.id, name: provider.name, quota: quota, isMock: true)
         }
     }
 }

@@ -1,18 +1,44 @@
 import Foundation
+import SwiftUI
 
 @main
 struct SubscriptionsCheck {
     static func main() {
+        func rgb(_ red: Double, _ green: Double, _ blue: Double) -> Color {
+            Color(.sRGB, red: red / 255, green: green / 255, blue: blue / 255, opacity: 1)
+        }
+        let paletteCases: [(Int, Color)] = [
+            (0, rgb(239, 92, 97)), (3, rgb(239, 92, 97)),
+            (5, rgb(240.5, 116, 83)), (7, rgb(242, 140, 69)),
+            (12, rgb(242, 140, 69)), (18, rgb(242, 140, 69)),
+            (20, rgb(237, 169, 79.5)), (22, rgb(232, 198, 90)),
+            (38, rgb(232, 198, 90)), (48, rgb(232, 198, 90)),
+            (49, rgb(219.5, 200.1875, 96.875)),
+            (50, rgb(192, 205, 112)),
+            (51, rgb(164.5, 209.8125, 127.125)),
+            (52, rgb(152, 212, 134)), (73, rgb(152, 212, 134)),
+            (100, rgb(152, 212, 134))
+        ]
+        for (remaining, expected) in paletteCases {
+            precondition(QuotaPalette.color(remaining: remaining) == expected,
+                         "Incorrect quota color at \(remaining)%")
+        }
+        precondition(QuotaPalette.color(remaining: -1) == QuotaPalette.color(remaining: 0))
+        precondition(QuotaPalette.color(remaining: 101) == QuotaPalette.color(remaining: 100))
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let live = CodexQuota(remaining: 37, windowMinutes: 10_080, reset: now,
             resetCredits: 3, availableResets: [], usageCreditBalance: 125,
             unlimitedUsageCredits: false)
         let normal = OverlaySubscription.resolve(codex: live, now: now)
         precondition(normal.count == 1 && !normal[0].isMock && normal[0].quota.remaining == 37)
+        let sameQuota = OverlaySubscription.resolve(codex: live, claude: live, grok: live,
+                                                    openCodeGo: live, kimi: live, now: now)
+        precondition(sameQuota.allSatisfy { $0.color == rgb(232, 198, 90) })
         precondition(OverlaySubscription.resolve(codex: nil, now: now).isEmpty)
         precondition(normal[0].quota.usageCreditBalance == 125)
         let mocks = OverlaySubscription.resolve(codex: nil, fullDemo: true, now: now)
         precondition(mocks.allSatisfy(\.isMock))
+        precondition(mocks.allSatisfy { $0.color == QuotaPalette.color(remaining: $0.quota.remaining) })
         precondition(mocks.map(\.id) == ["claude", "codex", "gemini", "grok", "opencode-go", "kimi"])
         precondition(mocks.dropFirst(3).map { $0.quota.windows.map(\.label) } ==
             [["7d"], ["5h", "7d", "Monthly"], ["5h", "7d"]])
@@ -123,5 +149,6 @@ struct SubscriptionsCheck {
         print("PASS: Antigravity parsing, invalid/expired data, live-only subscriptions, forced demo")
         print("PASS: both quota windows, percentages, Claude mock and single banked reset")
         print("PASS: empty state without live quotas, demo fixtures only in full demo")
+        print("PASS: quota palette zones, soft boundaries, endpoints and provider-independent colors")
     }
 }

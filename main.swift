@@ -447,6 +447,7 @@ struct Overlay: View {
                 Circle().trim(from: 0, to: CGFloat(percent) / 100)
                     .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                    .animation(reduceMotion ? nil : OverlayMotion.quota, value: percent)
                 Group {
                     let image = switch mark {
                     case "kimi": HarnessImages.kimi
