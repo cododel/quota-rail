@@ -339,6 +339,17 @@ struct Overlay: View {
                         .frame(width: 268, alignment: .leading)
                         .padding()
                         .foregroundStyle(.white)
+                        .overlay(alignment: .topTrailing) {
+                            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                            let displayVersion = version.flatMap { $0.isEmpty ? nil : $0 }
+                            Text(displayVersion.map { "v\($0)" } ?? "Preview")
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.20))
+                                .padding(.top, 5)
+                                .padding(.trailing, 8)
+                                .allowsHitTesting(false)
+                                .accessibilityLabel(displayVersion.map { "Version \($0)" } ?? "Preview build")
+                        }
                     }
                 }
                 .padding(.trailing, 0)

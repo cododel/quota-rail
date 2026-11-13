@@ -299,6 +299,9 @@ and disable the checkbox. Keep protocol/install/auth diagnostics out of this nor
 The menu also contains **Keep overlay visible**, eligible release update controls,
 conditional demo/screen-access controls, and **Quit** at the bottom after a divider.
 The engineering guidelines own which modes expose those conditional controls.
+When bundle version metadata is available, show the current version as a muted
+10 pt label in the top-right corner of the popover, prefixed with `v`.
+Source previews without bundle version metadata show **Preview** in the same spot.
 
 ## Empty, unavailable and demonstration states
 
