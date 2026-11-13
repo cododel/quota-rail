@@ -204,11 +204,13 @@ final class OverlayState: ObservableObject {
     var subscriptions: [OverlaySubscription] {
         OverlaySubscription.resolve(codex: codexQuota, antigravity: antigravityQuota, claude: claudeQuota, grok: grokQuota, openCodeGo: openCodeGoQuota, kimi: kimiQuota, fullDemo: fullDemo, now: demoStart)
     }
-    var settingsAtMouseDown: Bool?
     @Published var pinned = false
     @Published var settings = false
     @Published var settingsHovered = false
+    @Published var settingsHoverEnabled = false
+    var expansionID = UUID()
     var closeTask: Task<Void, Never>?
+    var settingsHoverTask: Task<Void, Never>?
     var hovering = false
 }
 
@@ -249,10 +251,8 @@ struct Overlay: View {
                 }
                 .accessibilityHidden(!state.expanded)
             Button {
-                    let wasOpen = state.settingsAtMouseDown ?? state.settings
-                    state.settingsAtMouseDown = nil
                     state.selectedSubscription = nil
-                    state.settings = !wasOpen
+                    state.settings.toggle()
                 } label: {
                     SettingsGlyph(borderVisible: state.borderVisible, progress: settingsExpanded ? 1 : 0)
                     .animation(
@@ -262,73 +262,81 @@ struct Overlay: View {
                 }
                 .buttonStyle(SettingsButtonStyle())
                 .help("Overlay settings")
-                .onHover { state.settingsHovered = $0 }
+                .onHover(perform: settingsHoverChanged)
                 .accessibilityLabel("Overlay settings")
+                .background {
+                    RailPopover(isPresented: state.settings) {
+                        state.settings = false
+                    } content: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if state.releaseUpdates.canCheck {
+                                ReleaseUpdateControls(updates: state.releaseUpdates)
+                                Divider()
+                            }
+                            Toggle("Keep overlay visible", isOn: $state.pinned)
+                            if state.showsDemoSettings {
+                                Toggle("Full demo mode", isOn: $state.fullDemo)
+                                    .toggleStyle(.checkbox)
+                            }
+                            Divider()
+                            let signedInProviders = state.providerStatuses.filter(\.showsInSettings)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Subscriptions")
+                                    .font(.system(size: 12, weight: .medium))
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        if state.fullDemo {
+                                            ForEach(state.subscriptions) { subscription in
+                                                subscriptionRow(subscription.name, subscription: subscription, detail: nil)
+                                            }
+                                        } else if state.providerStatuses.isEmpty {
+                                            Text("Checking providers…").foregroundStyle(.secondary)
+                                        } else if signedInProviders.isEmpty {
+                                            Text("No signed-in CLIs found").foregroundStyle(.secondary)
+                                        } else {
+                                            ForEach(signedInProviders, id: \.name) { provider in
+                                                let subscription = state.subscriptions.first { $0.name == provider.name }
+                                                subscriptionRow(provider.name, subscription: subscription,
+                                                                detail: subscription == nil ? "No quota" : provider.planLabel)
+                                            }
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .frame(width: 268, height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : signedInProviders.count) * 24)))
+                            }
+                            if !state.hasScreenAccess {
+                                Button("Allow Screen Access for Adaptive Outline") {
+                                    state.hasScreenAccess = CGRequestScreenCaptureAccess()
+                                }
+                            }
+                            Divider()
+                            Button("Quit") {
+                                NSApp.terminate(nil)
+                            }
+                        }
+                        .padding()
+                        .foregroundStyle(.white)
+                    }
+                }
                 .padding(.trailing, 0)
                 .offset(x: state.expanded ? 0 : 52, y: state.expanded ? OverlayGeometry.settingsCenterY + extraHeight / 2 : 20)
                 .animation(
                     reduceMotion ? nil : .spring(response: state.expanded ? 0.44 : 0.32, dampingFraction: 0.95),
                     value: state.expanded
                 )
-                .allowsHitTesting(state.expanded)
-                .accessibilityHidden(!state.expanded)
-                .popover(isPresented: $state.settings, arrowEdge: .leading) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if state.releaseUpdates.canCheck {
-                            ReleaseUpdateControls(updates: state.releaseUpdates)
-                            Divider()
-                        }
-                        Toggle("Keep overlay visible", isOn: $state.pinned)
-                        if state.showsDemoSettings {
-                            Toggle("Full demo mode", isOn: $state.fullDemo)
-                                .toggleStyle(.checkbox)
-                        }
-                        Divider()
-                        let signedInProviders = state.providerStatuses.filter(\.showsInSettings)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Subscriptions")
-                                .font(.system(size: 12, weight: .medium))
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    if state.fullDemo {
-                                        ForEach(state.subscriptions) { subscription in
-                                            subscriptionRow(subscription.name, subscription: subscription, detail: nil)
-                                        }
-                                    } else if state.providerStatuses.isEmpty {
-                                        Text("Checking providers…").foregroundStyle(.secondary)
-                                    } else if signedInProviders.isEmpty {
-                                        Text("No signed-in CLIs found").foregroundStyle(.secondary)
-                                    } else {
-                                        ForEach(signedInProviders, id: \.name) { provider in
-                                            let subscription = state.subscriptions.first { $0.name == provider.name }
-                                            subscriptionRow(provider.name, subscription: subscription,
-                                                            detail: subscription == nil ? "No quota" : provider.planLabel)
-                                        }
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(width: 268, height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : signedInProviders.count) * 24)))
-                        }
-                        if !state.hasScreenAccess {
-                            Button("Allow Screen Access for Adaptive Outline") {
-                                state.hasScreenAccess = CGRequestScreenCaptureAccess()
-                            }
-                        }
-                        Divider()
-                        Button("Quit") {
-                            NSApp.terminate(nil)
-                        }
-                    }
-                    .padding()
-                }
+                .allowsHitTesting(state.settingsHoverEnabled)
+                .accessibilityHidden(!state.settingsHoverEnabled)
         }
         .foregroundStyle(.white)
         .frame(width: 48, height: OverlayGeometry.panelHeight, alignment: .trailing)
         .clipped()
         .contentShape(HoverRegion(expanded: state.expanded))
         .onHover(perform: hoverChanged)
-        .onDisappear { state.closeTask?.cancel() }
+        .onDisappear {
+            state.closeTask?.cancel()
+            settingsHoverChanged(false)
+        }
         .onChange(of: state.settingsHovered) { _, inside in
             if !inside { scheduleCloseIfOutside() }
         }
@@ -371,7 +379,6 @@ struct Overlay: View {
 
     private func movingMeter(_ subscription: OverlaySubscription, row: CGFloat) -> some View {
         Button {
-            state.settingsAtMouseDown = nil
             state.settings = false
             state.selectedSubscription = state.selectedSubscription == subscription.id ? nil : subscription.id
         } label: {
@@ -381,7 +388,7 @@ struct Overlay: View {
             .buttonStyle(.plain)
             .allowsHitTesting(state.expanded)
             .background {
-                IndicatorPopover(isPresented: state.selectedSubscription == subscription.id) {
+                RailPopover(isPresented: state.selectedSubscription == subscription.id, anchorInsetFromTop: 13) {
                     if state.selectedSubscription == subscription.id {
                         state.selectedSubscription = nil
                     }
@@ -440,11 +447,34 @@ struct Overlay: View {
         .accessibilityLabel("\(provider), \(percent) percent remaining")
     }
 
+    private func settingsHoverChanged(_ inside: Bool) {
+        state.settingsHoverTask?.cancel()
+        state.settingsHoverTask = nil
+        guard inside, state.settingsHoverEnabled else {
+            state.settingsHovered = false
+            return
+        }
+        state.settingsHoverTask = Task { @MainActor [weak state] in
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+            guard let state, state.settingsHoverEnabled else { return }
+            state.settingsHovered = true
+            state.settingsHoverTask = nil
+        }
+    }
+
     private func hoverChanged(_ inside: Bool) {
         state.hovering = inside
         state.closeTask?.cancel()
         if inside {
-            withAnimation(reduceMotion ? nil : openSpring) { state.expanded = true }
+            guard !state.expanded else { return }
+            let expansionID = UUID()
+            state.expansionID = expansionID
+            withAnimation(reduceMotion ? nil : openSpring, completionCriteria: .removed) {
+                state.expanded = true
+            } completion: {
+                guard state.expanded, state.expansionID == expansionID else { return }
+                state.settingsHoverEnabled = true
+            }
         } else {
             scheduleCloseIfOutside()
         }
@@ -455,6 +485,8 @@ struct Overlay: View {
         state.closeTask = Task { @MainActor in
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
             guard !state.hovering, !state.settingsHovered, !state.pinned, !state.settings, state.selectedSubscription == nil else { return }
+            state.settingsHoverEnabled = false
+            settingsHoverChanged(false)
             withAnimation(reduceMotion ? nil : closeSpring) { state.expanded = false }
         }
     }
@@ -466,7 +498,6 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
     private var contrastMonitor: ContrastMonitor?
     private var quotaTask: Task<Void, Never>?
     private var outsideClickMonitor: Any?
-    private var panelClickMonitor: Any?
     private let state = OverlayState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -488,18 +519,6 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         panel.orderFrontRegardless()
         self.panel = panel
         state.releaseUpdates.start()
-        // Preserve the settings popover state during its native dismissal.
-        panelClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
-            guard let self, event.window === self.panel else { return event }
-            if event.type == .leftMouseDown {
-                self.state.settingsAtMouseDown = self.state.settings
-            } else {
-                DispatchQueue.main.async { [weak self] in
-                    self?.state.settingsAtMouseDown = nil
-                }
-            }
-            return event
-        }
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         ) { [weak self] _ in
@@ -563,10 +582,6 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let panelClickMonitor {
-            NSEvent.removeMonitor(panelClickMonitor)
-            self.panelClickMonitor = nil
-        }
         if let outsideClickMonitor {
             NSEvent.removeMonitor(outsideClickMonitor)
             self.outsideClickMonitor = nil
@@ -574,6 +589,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         quotaTask?.cancel()
         contrastMonitor?.stop()
         state.closeTask?.cancel()
+        state.settingsHoverTask?.cancel()
     }
 }
 

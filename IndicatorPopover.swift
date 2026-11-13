@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-struct IndicatorPopover<Content: View>: NSViewRepresentable {
+struct RailPopover<Content: View>: NSViewRepresentable {
     let isPresented: Bool
+    var anchorInsetFromTop: CGFloat? = nil
     let dismiss: () -> Void
     @ViewBuilder let content: () -> Content
 
@@ -20,7 +21,7 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
             coordinator.close()
             return
         }
-        coordinator.show(from: anchor, content: content(), dismiss: dismiss)
+        coordinator.scheduleShow(from: anchor, insetFromTop: anchorInsetFromTop, content: content(), dismiss: dismiss)
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
@@ -30,6 +31,7 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         private let popover = NSPopover()
+        private var pendingShow: Task<Void, Never>?
         private var clickMonitor: Any?
         private var dismiss: (() -> Void)?
 
@@ -37,8 +39,19 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
             popover.behavior = .applicationDefined
         }
 
-        func show(from anchor: NSView, content: Content, dismiss: @escaping () -> Void) {
-            guard let panelContent = anchor.window?.contentView else { return }
+        func scheduleShow(from anchor: NSView, insetFromTop: CGFloat?, content: Content, dismiss: @escaping () -> Void) {
+            pendingShow?.cancel()
+            // AppKit positions the popover window after SwiftUI finishes updating the anchor.
+            pendingShow = Task { @MainActor [weak self, weak anchor] in
+                guard !Task.isCancelled, let self, let anchor else { return }
+                self.pendingShow = nil
+                self.show(from: anchor, insetFromTop: insetFromTop, content: content, dismiss: dismiss)
+            }
+        }
+
+        private func show(from anchor: NSView, insetFromTop: CGFloat?, content: Content, dismiss: @escaping () -> Void) {
+            guard let window = anchor.window, let panelContent = window.contentView,
+                  let screen = window.screen else { return }
             self.dismiss = dismiss
             let host: NSHostingController<Content>
             if let existing = popover.contentViewController as? NSHostingController<Content> {
@@ -49,18 +62,21 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
                 popover.contentViewController = host
             }
             // Place the popover using its final content size on the first layout pass.
-            let contentSize = host.sizeThatFits(in: NSSize(
-                width: CGFloat.greatestFiniteMagnitude,
-                height: CGFloat.greatestFiniteMagnitude
-            ))
+            let available = screen.visibleFrame.size
+            let measured = host.sizeThatFits(in: available)
+            guard measured.width.isFinite, measured.height.isFinite,
+                  measured.width > 0, measured.height > 0 else { return }
+            let contentSize = NSSize(width: min(measured.width, available.width),
+                                     height: min(measured.height, available.height))
             if popover.contentSize != contentSize {
                 popover.contentSize = contentSize
             }
-            // Use the panel edge for X and the selected ring for Y.
-            let ringY = anchor.isFlipped ? anchor.bounds.minY + 13 : anchor.bounds.maxY - 13
-            let ringCenter = anchor.convert(NSPoint(x: anchor.bounds.midX, y: ringY), to: panelContent)
+            // Keep the arrow beside the rail and aligned with the trigger.
+            let inset = insetFromTop ?? anchor.bounds.height / 2
+            let anchorY = anchor.isFlipped ? anchor.bounds.minY + inset : anchor.bounds.maxY - inset
+            let anchorCenter = anchor.convert(NSPoint(x: anchor.bounds.midX, y: anchorY), to: panelContent)
             let attachment = CGRect(x: panelContent.bounds.maxX - OverlayGeometry.width,
-                                    y: ringCenter.y - 0.5, width: 1, height: 1)
+                                    y: anchorCenter.y - 0.5, width: 1, height: 1)
             if popover.isShown {
                 if popover.positioningRect != attachment {
                     popover.positioningRect = attachment
@@ -93,6 +109,8 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
         }
 
         func close() {
+            pendingShow?.cancel()
+            pendingShow = nil
             if let clickMonitor {
                 NSEvent.removeMonitor(clickMonitor)
                 self.clickMonitor = nil
