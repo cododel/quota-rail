@@ -315,6 +315,10 @@ struct Overlay: View {
                                 state.hasScreenAccess = CGRequestScreenCaptureAccess()
                             }
                         }
+                        Divider()
+                        Button("Quit") {
+                            NSApp.terminate(nil)
+                        }
                     }
                     .padding()
                 }
