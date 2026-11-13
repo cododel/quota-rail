@@ -38,7 +38,7 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
         }
 
         func show(from anchor: NSView, content: Content, dismiss: @escaping () -> Void) {
-            guard anchor.window != nil else { return }
+            guard let panelContent = anchor.window?.contentView else { return }
             self.dismiss = dismiss
             let host: NSHostingController<Content>
             if let existing = popover.contentViewController as? NSHostingController<Content> {
@@ -48,12 +48,26 @@ struct IndicatorPopover<Content: View>: NSViewRepresentable {
                 host = NSHostingController(rootView: content)
                 popover.contentViewController = host
             }
-            guard !popover.isShown else { return }
-
-            // Align the arrow with the ring, above the percentage label.
-            let ringCenter = anchor.isFlipped ? 13.0 : anchor.bounds.height - 13.0
-            let attachment = CGRect(x: 0, y: ringCenter, width: 1, height: 1)
-            popover.show(relativeTo: attachment, of: anchor, preferredEdge: .minX)
+            // Place the popover using its final content size on the first layout pass.
+            let contentSize = host.sizeThatFits(in: NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            ))
+            if popover.contentSize != contentSize {
+                popover.contentSize = contentSize
+            }
+            // Use the panel edge for X and the selected ring for Y.
+            let ringY = anchor.isFlipped ? anchor.bounds.minY + 13 : anchor.bounds.maxY - 13
+            let ringCenter = anchor.convert(NSPoint(x: anchor.bounds.midX, y: ringY), to: panelContent)
+            let attachment = CGRect(x: panelContent.bounds.maxX - OverlayGeometry.width,
+                                    y: ringCenter.y - 0.5, width: 1, height: 1)
+            if popover.isShown {
+                if popover.positioningRect != attachment {
+                    popover.positioningRect = attachment
+                }
+                return
+            }
+            popover.show(relativeTo: attachment, of: panelContent, preferredEdge: .minX)
             clickMonitor = NSEvent.addLocalMonitorForEvents(
                 matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]
             ) { [weak self, weak anchor] event in
