@@ -466,6 +466,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
     private let state = OverlayState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LoginItem.registerOnFirstLaunch()
         guard let screen = NSScreen.main else { return }
         let bounds = screen.frame
         let panel = NSPanel(

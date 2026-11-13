@@ -14,6 +14,8 @@ Requires an Apple Silicon Mac with macOS 14 or later.
 2. Extract the archive, move `Quota Rail.app` to a writable Applications folder, and open it.
 3. Sign in through the CLI for each subscription you want to see. Quota Rail uses those existing sign-ins and shows providers when quota data is available.
 
+On first launch, Quota Rail registers to open automatically when you sign in to macOS. You can turn this off under **System Settings → General → Login Items & Extensions**.
+
 Quota Rail checks for updates on launch. You can also select **Check for Updates** in the gear menu. Confirm installation in the update dialog to let Sparkle verify the download, replace the app, and relaunch it.
 
 The app is distributed without Apple notarization, so macOS may show a Gatekeeper warning on first launch. If you're upgrading from v0.0.1, quit the old `projector-overlay` process, download the new ZIP once, and open `Quota Rail.app`. Your saved subscription visibility carries over.

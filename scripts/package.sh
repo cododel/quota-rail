@@ -46,6 +46,7 @@ if [[ "$version" != 0.0.0 ]]; then
   cp "$sparkle/LICENSE" "$resources/Sparkle-LICENSE"
   swift_flags=(-D QUOTA_SPARKLE -F "$contents/Frameworks" -framework Sparkle
     -Xlinker -rpath -Xlinker '@executable_path/../Frameworks')
+  if [[ -z "${QUOTA_RAIL_FEED_URL:-}" ]]; then swift_flags+=(-D QUOTA_RELEASE); fi
   /usr/libexec/PlistBuddy -c "Add :SUFeedURL string $feed_url" -c "Add :SUPublicEDKey string $key" \
     -c 'Add :SUVerifyUpdateBeforeExtraction bool true' -c 'Add :SURequireSignedFeed bool true' \
     -c 'Add :SUEnableAutomaticChecks bool true' -c 'Add :SUAllowsAutomaticUpdates bool false' "$plist"
