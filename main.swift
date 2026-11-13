@@ -67,7 +67,7 @@ struct HoverRegion: Shape {
     let expanded: Bool
 
     func path(in rect: CGRect) -> Path {
-        let size = expanded ? rect.size : CGSize(width: 28, height: 48)
+        let size = expanded ? rect.size : CGSize(width: 3, height: 48)
         return Path(CGRect(
             x: rect.maxX - size.width, y: rect.midY - size.height / 2,
             width: size.width, height: size.height
@@ -333,7 +333,16 @@ struct Overlay: View {
         .frame(width: 48, height: OverlayGeometry.panelHeight, alignment: .trailing)
         .clipped()
         .contentShape(HoverRegion(expanded: state.expanded))
-        .onHover(perform: hoverChanged)
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location):
+                let bounds = CGRect(x: 0, y: 0, width: 48, height: OverlayGeometry.panelHeight)
+                let region = HoverRegion(expanded: state.expanded).path(in: bounds)
+                hoverChanged(region.contains(location))
+            case .ended:
+                hoverChanged(false)
+            }
+        }
         .onDisappear {
             state.closeTask?.cancel()
             settingsHoverChanged(false)
@@ -464,6 +473,7 @@ struct Overlay: View {
     }
 
     private func hoverChanged(_ inside: Bool) {
+        guard state.hovering != inside else { return }
         state.hovering = inside
         state.closeTask?.cancel()
         if inside {
