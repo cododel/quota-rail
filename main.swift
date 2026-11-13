@@ -3,8 +3,7 @@ import Combine
 import SwiftUI
 
 enum HarnessImages {
-    static let directory = URL(fileURLWithPath: CommandLine.arguments[0])
-        .deletingLastPathComponent().appendingPathComponent("assets")
+    static let directory = AppResources.directory.appendingPathComponent("assets")
     static let claude = NSImage(contentsOf: directory.appendingPathComponent("claude.png"))
     static let antigravity = NSImage(contentsOf: directory.appendingPathComponent("antigravity.png"))
     static let grok = NSImage(contentsOf: directory.appendingPathComponent("grok.svg"))
@@ -263,8 +262,10 @@ struct Overlay: View {
                 .accessibilityHidden(!state.expanded)
                 .popover(isPresented: $state.settings, arrowEdge: .leading) {
                     VStack(alignment: .leading, spacing: 12) {
-                        ReleaseUpdateControls(updates: state.releaseUpdates)
-                        Divider()
+                        if state.releaseUpdates.canCheck {
+                            ReleaseUpdateControls(updates: state.releaseUpdates)
+                            Divider()
+                        }
                         Toggle("Keep overlay visible", isOn: $state.pinned)
                         Toggle("Full demo mode", isOn: $state.fullDemo)
                             .toggleStyle(.checkbox)
@@ -299,7 +300,6 @@ struct Overlay: View {
         .foregroundStyle(.white)
         .frame(width: 48, height: 328, alignment: .trailing)
         .clipped()
-        .task { await state.releaseUpdates.check() }
         .contentShape(HoverRegion(expanded: state.expanded))
         .onHover(perform: hoverChanged)
         .onDisappear { state.closeTask?.cancel() }
@@ -429,6 +429,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         panel.contentView = NSHostingView(rootView: Overlay(state: state))
         panel.orderFrontRegardless()
         self.panel = panel
+        state.releaseUpdates.start()
         // Preserve the settings popover state during its native dismissal.
         panelClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
@@ -501,6 +502,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
 enum OverlayDemo {
     @MainActor
     static func main() {
+        AppResources.migratePreferences()
         if CommandLine.arguments.contains("--export-contour") {
             print(OverlayGeometry.drawing())
             return

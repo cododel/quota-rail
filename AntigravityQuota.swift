@@ -36,7 +36,7 @@ struct AntigravityQuota: Sendable {
                "/opt/homebrew/bin", "/usr/local/bin"]
         guard let executable = folders.filter({ $0.hasPrefix("/") }).map({ $0 + "/agy" })
             .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else { return nil }
-        let helper = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("agy-quota.py")
+        let helper = AppResources.directory.appendingPathComponent("agy-quota.py")
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")

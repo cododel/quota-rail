@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing stable release tag to republish in the update feed
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -18,11 +23,13 @@ jobs:
           persist-credentials: false
       - name: Run checks
         run: |
-          xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 -module-cache-path cache CodexQuota.swift AntigravityQuota.swift ClaudeQuota.swift GrokQuota.swift OverlaySubscription.swift checks/SubscriptionsCheck.swift -o checks/subscriptions-check
+          xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 -module-cache-path cache AppResources.swift CodexQuota.swift AntigravityQuota.swift ClaudeQuota.swift GrokQuota.swift OverlaySubscription.swift checks/SubscriptionsCheck.swift -o checks/subscriptions-check
           ./checks/subscriptions-check
           /usr/bin/python3 checks/agy-helper-check.py
       - name: Build archive
         shell: bash
+        env:
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: |
           version=0.0.0
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
@@ -36,22 +43,47 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-15
+    concurrency:
+      group: quota-rail-update-feed
+      cancel-in-progress: false
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: quota-rail-macos-arm64
-      - name: Publish GitHub release
+          path: release
+      - name: Prepare stable release archive
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_flags=()
-          if [[ "$GITHUB_REF_NAME" == v0.0.1 ]]; then
-            release_flags+=(--prerelease --title "v0.0.1 (Pre-alpha)")
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ||
+                "$RELEASE_TAG" == v0.0.0 || "$RELEASE_TAG" == v0.0.1 ]]; then
+            echo "Expected a stable release tag with Sparkle support" >&2
+            exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" quota-rail-macos-arm64.zip \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes "${release_flags[@]}"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null; then
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern quota-rail-macos-arm64.zip --dir release --clobber
+          elif [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo "Retry requires an already published release" >&2
+            exit 1
+          fi
+          bash scripts/fetch-sparkle.sh "$RUNNER_TEMP/sparkle"
+      - name: Sign release archive and appcast
+        env:
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: bash scripts/sign-appcast.sh release "$RELEASE_TAG" "$RUNNER_TEMP/sparkle/bin"
+      - name: Publish verified release and appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-update.sh "$RELEASE_TAG" release
