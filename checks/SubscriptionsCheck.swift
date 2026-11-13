@@ -131,13 +131,15 @@ struct SubscriptionsCheck {
         let kimiModern = Data("""
             {"data":{"kind":"ok","quota":{"usages":{
               "limit5h":{"usedRatio":0,"resetAt":"2027-01-20T14:15:30.192Z"},
-              "limit7d":{"usedRatio":0.25},"monthTotal":{"usedRatio":0.5},"monthCode":{"usedRatio":1}
+              "limit7d":{"usedRatio":0.25,"resetAt":"2027-01-20T14:15:30Z"},
+              "monthTotal":{"usedRatio":0.5},"monthCode":{"usedRatio":1}
             },"extraUsage":null}}}
             """.utf8)
         let modernWindows = KimiQuota.parse(kimiModern, now: now)?.windows
         precondition(modernWindows?.map(\.label) == ["5h", "7d", "Monthly", "Monthly code"])
         precondition(modernWindows?.map(\.remaining) == [100, 75, 50, 0])
-        precondition(modernWindows?.first?.reset != nil)
+        precondition(modernWindows?.first?.reset == Date(timeIntervalSince1970: 1_800_454_530.192))
+        precondition(modernWindows?[1].reset == Date(timeIntervalSince1970: 1_800_454_530))
         let kimiEmpty = Data(#"{"data":{"kind":"ok","quota":{"usages":{},"extraUsage":null}}}"#.utf8)
         precondition(KimiQuota.parse(kimiEmpty, now: now) == nil)
         let kimiSummary = Data("""

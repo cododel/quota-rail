@@ -124,8 +124,11 @@ enum KimiQuota {
                 guard let usage = usages[id] as? [String: Any],
                       let used = number(usage["usedRatio"]), (0...1).contains(used) else { continue }
                 let reset = (usage["resetAt"] as? String).flatMap { value in
-                    (try? Date(value, strategy: .iso8601)) ??
-                        (try? Date(value, strategy: .iso8601.time(includingFractionalSeconds: true)))
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    if let date = formatter.date(from: value) { return date }
+                    formatter.formatOptions = [.withInternetDateTime]
+                    return formatter.date(from: value)
                 }
                 if let reset, reset <= now { continue }
                 windows.append(.init(id: id, remaining: Int(((1 - used) * 100).rounded()),
