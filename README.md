@@ -78,7 +78,7 @@ Run the Swift watcher from the repository with Bun and the Xcode command line to
 bun run watch-preview
 ```
 
-The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data. In the terminal, press `d` to switch between live and demo quotas, or `r` to restart the last successful build.
+The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data. In the terminal, press `d` to switch between live and demo quotas, `r` to restart the last successful build, or `s` to suspend and resume the preview. Swift edits made while suspended are rebuilt on resume.
 
 To build once:
 
