@@ -64,16 +64,6 @@ On first launch, Quota Rail registers to open automatically when you sign in to 
 
 Quota Rail checks for updates on launch. You can also select **Check for Updates** in the gear menu. Confirm installation in the update dialog to let Sparkle verify the download, replace the app, and relaunch it.
 
-### If Adaptive Outline stops working after an update
-
-macOS may still show screen recording access as enabled for the previous build.
-If toggling the existing entry does not restore the outline, grant access to the updated app:
-
-1. Quit Quota Rail.
-2. In **System Settings → Privacy & Security → Screen & System Audio Recording**, select **Quota Rail** and remove the entry with **−**.
-3. Use **+** to add the updated **Quota Rail.app** from Applications and enable access.
-4. Open Quota Rail again. If macOS asks you to quit and reopen the app, follow that prompt.
-
 ## Development
 
 Read the [design specification](docs/DESIGN.md), [agent guide](AGENTS.md),

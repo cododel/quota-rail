@@ -95,8 +95,6 @@ struct SettingsReveal: Shape {
 }
 
 struct SettingsGlyph: View, Animatable {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var borderVisible: Bool
     var progress: CGFloat
     var animatableData: CGFloat {
         get { progress }
@@ -114,8 +112,6 @@ struct SettingsGlyph: View, Animatable {
                         .trim(from: 0, to: 0.25 + 0.75 * amount)
                         .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round))
                         .stroke(Color(white: 0.85).opacity(0.15), lineWidth: 1)
-                        .opacity(borderVisible ? 1 : 0)
-                        .animation(reduceMotion ? nil : OverlayMotion.outline, value: borderVisible)
                         .allowsHitTesting(false)
                 }
                 .rotationEffect(.degrees(-90))
@@ -133,8 +129,7 @@ struct SettingsGlyph: View, Animatable {
                 .overlay {
                     SettingsReveal(progress: amount)
                         .stroke(Color(white: 0.85).opacity(0.15), lineWidth: 1)
-                        .opacity(borderVisible ? amount : 0)
-                        .animation(reduceMotion ? nil : OverlayMotion.outline, value: borderVisible)
+                        .opacity(amount)
                         .allowsHitTesting(false)
                 }
         }
@@ -156,8 +151,6 @@ final class OverlayState: ObservableObject {
     @Published var codexSnapshot = ProviderQuotaSnapshot<CodexQuota>()
     @Published var quotaStatus = "Checking Codex quota…"
     @Published var expanded = false
-    @Published var borderVisible = false
-    @Published var hasScreenAccess = CGPreflightScreenCaptureAccess()
     @Published var selectedSubscription: String?
     @Published var claudeSnapshot = ProviderQuotaSnapshot<CodexQuota>()
     var providerStatuses: [ProviderStatus] {
@@ -302,8 +295,6 @@ struct Overlay: View {
                 .clipShape(contour)
                 .overlay {
                     contour.stroke(Color(white: 0.85).opacity(0.20), lineWidth: 1)
-                        .opacity(state.borderVisible ? 1 : 0)
-                        .animation(reduceMotion ? nil : OverlayMotion.outline, value: state.borderVisible)
                         .allowsHitTesting(false)
                 }
                 .offset(x: entryOffset)
@@ -312,7 +303,7 @@ struct Overlay: View {
                     state.selectedSubscription = nil
                     state.settings.toggle()
                 } label: {
-                    SettingsGlyph(borderVisible: state.borderVisible, progress: settingsExpanded ? 1 : 0)
+                    SettingsGlyph(progress: settingsExpanded ? 1 : 0)
                     .animation(
                         reduceMotion ? nil : OverlayMotion.settings,
                         value: settingsExpanded
@@ -362,11 +353,6 @@ struct Overlay: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .frame(height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : installedProviders.count) * 24)))
-                            }
-                            if !state.hasScreenAccess {
-                                Button("Allow Screen Access for Adaptive Outline") {
-                                    state.hasScreenAccess = CGRequestScreenCaptureAccess()
-                                }
                             }
                             Divider()
                             Button("Quit") {
@@ -656,7 +642,6 @@ struct Overlay: View {
 @MainActor
 final class OverlayDelegate: NSObject, NSApplicationDelegate {
     private var panel: NSPanel?
-    private var contrastMonitor: ContrastMonitor?
     private var quotaTask: Task<Void, Never>?
     private var outsideClickMonitor: Any?
     private let state = OverlayState()
@@ -689,8 +674,6 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                 state.selectedSubscription = nil
             }
         }
-        contrastMonitor = ContrastMonitor(state: state, panel: panel)
-        contrastMonitor?.start()
         quotaTask = Task { [state] in
             while !Task.isCancelled {
                 if !state.fullDemo && Date() >= state.nextQuotaRefresh {
@@ -745,7 +728,6 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
             self.outsideClickMonitor = nil
         }
         quotaTask?.cancel()
-        contrastMonitor?.stop()
         state.closeTask?.cancel()
         state.settingsHoverTask?.cancel()
     }

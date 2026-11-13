@@ -113,7 +113,7 @@ with the system and background. Do not invent a fixed popover background hex or 
 | Provider marks and primary text | White `#FFFFFF`; preserve the supplied OpenCode mark's internal detail |
 | Empty ring track | White at 18% over black (approximately `#2E2E2E`) |
 | Secondary text | Native secondary foreground treatment |
-| Adaptive outline | Light gray, approximately `#D9D9D9`, 1 pt |
+| Outline | Light gray, approximately `#D9D9D9`, 1 pt |
 | Rail outline opacity | 20% |
 | Settings arc/disk outline opacity | 15% |
 
@@ -143,16 +143,11 @@ The arc starts at 12 o'clock, runs clockwise, and covers `remaining / 100` of th
 At 0% only the empty track remains; at 100% the ring is full. Neither color nor arc length
 may refer to a different quota window than the number beneath it.
 
-### Contrast adaptation
+### Outline
 
-On a dark background, add the subtle outline to separate black from black. The current
-contrast behavior enables it below 2:1 against black and disables it at 2.5:1 or above;
-the gap prevents flickering near the threshold. The overlay itself is excluded from
-background measurement. The arc outline follows the full stroke, including round ends.
-
-No contrast numbers appear in ordinary settings. If screen access is required, explain
-that it enables **Adaptive Outline**. It must not sound like permission to read quotas.
-This outline is visual separation, not a claim of text-accessibility contrast compliance.
+The rail uses a constant 1 pt light gray outline at 20% opacity. The settings arc
+and disk use the same color at 15% opacity and transition with the settings glyph.
+The arc outline follows the full stroke, including its round ends.
 
 ## Typography and logos
 
@@ -226,7 +221,6 @@ presentation remains system-controlled; the custom timing table describes the ra
 | Rail expands | 480 ms | Edge hover; after entrance |
 | Rail collapses | 360 ms | 100 ms outside, unless held open |
 | Settings arc ↔ disk | 360 ms | 50 ms sustained hover to reveal; no reveal if pointer leaves early |
-| Adaptive outline appears/disappears | 200 ms | Contrast-state change |
 | Quota arc/color update | 360 ms | Displayed remaining value changes |
 
 ### Entrance choreography
@@ -338,12 +332,11 @@ Source previews without bundle version metadata show **Preview** in the same spo
 
 The concept and behavior come from the approved development conversation, summarized in
 [DEVELOPMENT_REVIEW.md](DEVELOPMENT_REVIEW.md), including the later approved color study.
-The numeric baseline was checked against the current rail, details, popover, contrast,
+The numeric baseline was checked against the current rail, details, popover,
 geometry, motion and palette implementations. Source pointers for maintainers:
 [main.swift](../Sources/App/main.swift), [OverlayGeometry.swift](../Sources/Overlay/OverlayGeometry.swift),
 [OverlayMotion.swift](../Sources/Overlay/OverlayMotion.swift), [QuotaPalette.swift](../Sources/Overlay/QuotaPalette.swift),
-[CodexDetails.swift](../Sources/Overlay/CodexDetails.swift), [IndicatorPopover.swift](../Sources/Overlay/IndicatorPopover.swift),
-[ContrastMonitor.swift](../Sources/Overlay/ContrastMonitor.swift).
+[CodexDetails.swift](../Sources/Overlay/CodexDetails.swift), [IndicatorPopover.swift](../Sources/Overlay/IndicatorPopover.swift).
 
 The palette diagram is a deterministic illustration of the approved mapping. Existing
 README showcase/details images and the early geometry study are historical: they may
