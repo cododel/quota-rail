@@ -303,7 +303,7 @@ struct Overlay: View {
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .frame(width: 268, height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : signedInProviders.count) * 24)))
+                                .frame(height: CGFloat(max(24, (state.fullDemo ? state.subscriptions.count : signedInProviders.count) * 24)))
                             }
                             if !state.hasScreenAccess {
                                 Button("Allow Screen Access for Adaptive Outline") {
@@ -315,6 +315,7 @@ struct Overlay: View {
                                 NSApp.terminate(nil)
                             }
                         }
+                        .frame(width: 268, alignment: .leading)
                         .padding()
                         .foregroundStyle(.white)
                     }
