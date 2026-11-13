@@ -23,6 +23,7 @@ cat > "$plist" <<PLIST
 <dict>
   <key>CFBundleIdentifier</key><string>com.cododel.quota-rail</string>
   <key>CFBundleName</key><string>Quota Rail</string>
+  <key>CFBundleIconFile</key><string>QuotaRail</string>
   <key>CFBundleExecutable</key><string>projector-overlay</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$version</string>
@@ -57,6 +58,7 @@ xcrun --sdk macosx swiftc -O -parse-as-library \
   ${swift_flags[@]+"${swift_flags[@]}"} *.swift -o "$contents/MacOS/projector-overlay"
 cp agy-quota.py claude-quota.py "$resources/"
 cp -R assets "$resources/"
+cp assets/QuotaRail.icns "$resources/QuotaRail.icns"
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"
 ditto -c -k --norsrc --noextattr --keepParent "$app" "$stage/quota-rail-macos-arm64.zip"

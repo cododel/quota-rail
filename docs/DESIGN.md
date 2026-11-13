@@ -26,6 +26,26 @@ Three principles govern composition:
 - **Compact, deliberate spacing.** Keep rings legible and evenly spaced. Details are dense
   but grouped, with restrained typography rather than a second large percentage headline.
 
+## Application icon
+
+The application identity is **Rail**: an ivory rounded square with a black vertical
+rail silhouette, rounded left shoulders and flared right attachments. Two stacked
+quota arcs use Soft Leaf (75%) and Golden Yellow (35%), with charcoal remainder tracks.
+The mark contains no provider logos, numbers or settings gear. These fixed sample
+arcs identify the app; the icon does not display live account state.
+
+The icon is an optical adaptation of the panel, not a miniature screenshot. Its right
+edge curves inward and its strokes are heavier for recognition at small sizes.
+The tile is `#F5F2EB`, silhouette `#101110`, tracks `#2E2E2E`; arc colors use the
+remaining-quota palette below. Keep transparent margins outside the rounded tile.
+
+![Quota Rail application icon](../assets/quota-rail.png)
+
+`assets/quota-rail.svg` is the editable source. Regenerate the 1024 px PNG and
+multi-resolution ICNS from the repository root with
+`swift -module-cache-path cache scripts/build-icon.swift`. The packaged app declares
+`QuotaRail.icns` as its bundle icon. Generated concept studies are not production assets.
+
 ## Anatomy and geometry
 
 All dimensions are logical macOS points (pt), not display pixels. A 40 pt rail spans
