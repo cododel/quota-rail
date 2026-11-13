@@ -5,9 +5,10 @@ import { format } from 'node:util';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const directory = dirname(fileURLToPath(import.meta.url));
-const executable = join(directory, 'projector-overlay');
-const pendingExecutable = join(directory, 'projector-overlay.next');
+const directory = dirname(dirname(fileURLToPath(import.meta.url)));
+const sourceDirectories = ['App', 'Overlay', 'Providers'].map((name) => join(directory, 'Sources', name));
+const executable = join(directory, 'quota-rail');
+const pendingExecutable = join(directory, 'quota-rail.next');
 const launchArgs = process.argv.slice(2);
 const liveArgs = launchArgs.filter((arg) => arg !== '--demo' && arg !== '--full-demo');
 const input = process.stdin;
@@ -149,10 +150,11 @@ async function update() {
 }
 
 async function build() {
-  const sources = (await readdir(directory))
-    .filter((name) => name.endsWith('.swift'))
-    .sort()
-    .map((name) => join(directory, name));
+  const sources = (await Promise.all(sourceDirectories.map(async (sourceDirectory) =>
+    (await readdir(sourceDirectory))
+      .filter((name) => name.endsWith('.swift'))
+      .map((name) => join(sourceDirectory, name))
+  ))).flat().sort();
   if (stopping) return false;
   log('Building Swift overlay…');
   const succeeded = await new Promise((resolve) => {
@@ -175,17 +177,17 @@ async function build() {
   return succeeded;
 }
 
-const watcher = watch(directory, (_event, filename) => {
+const watchers = sourceDirectories.map((sourceDirectory) => watch(sourceDirectory, (_event, filename) => {
   if (filename && !filename.toString().endsWith('.swift')) return;
   clearTimeout(debounce);
   debounce = setTimeout(rebuild, 150);
-});
+}));
 
 async function shutdown() {
   if (stopping) return;
   stopping = true;
   clearTimeout(debounce);
-  watcher.close();
+  for (const watcher of watchers) watcher.close();
   if (interactive) {
     output.off('resize', drawHeader);
     input.off('data', onKey);
@@ -199,10 +201,12 @@ async function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-watcher.on('error', (error) => {
-  log(error);
-  void shutdown();
-});
+for (const watcher of watchers) {
+  watcher.on('error', (error) => {
+    log(error);
+    void shutdown();
+  });
+}
 
 function onKey(chunk) {
   for (const key of chunk.toString()) {

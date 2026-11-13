@@ -6,6 +6,27 @@ A native macOS overlay for checking how much of your AI subscriptions you have l
 
 [Download for Apple Silicon](https://github.com/cododel/quota-rail/releases/latest) · [Installation](#installation) · [Supported subscriptions](#supported-subscriptions) · [Build from source](#development)
 
+## Supported subscriptions
+
+| Provider | What the overlay shows |
+| --- | --- |
+| Codex | Available quota windows and reset times, plus credits and banked resets when reported |
+| Claude Code | 5-hour and weekly quotas, when reported |
+| Antigravity | 5-hour and weekly quotas for Gemini and Claude/GPT |
+| Grok Build | Shared weekly quota and reset time |
+| OpenCode Go | 5-hour, weekly, and monthly quotas when reported |
+| Kimi | Quota windows and reset times from the signed-in Kimi CLI |
+
+Check the release notes for what ships in each download.
+
+## Quota details
+
+Click a ring to see its quota windows and reset times. In the gear menu, choose which subscriptions appear on the rail or keep it expanded.
+
+<p>
+  <img src="docs/images/quota-details-palette.png" width="420" alt="Codex popover showing weekly quota, time until reset, credits, and expiration dates for three banked resets">
+</p>
+
 ## Installation
 
 Requires an Apple Silicon Mac with macOS 14 or later.
@@ -43,8 +64,6 @@ On first launch, Quota Rail registers to open automatically when you sign in to 
 
 Quota Rail checks for updates on launch. You can also select **Check for Updates** in the gear menu. Confirm installation in the update dialog to let Sparkle verify the download, replace the app, and relaunch it.
 
-If you're upgrading from v0.0.1, quit the old `projector-overlay` process, download the new ZIP once, and open `Quota Rail.app`. Your saved subscription visibility carries over.
-
 ### If Adaptive Outline stops working after an update
 
 macOS may still show screen recording access as enabled for the previous build.
@@ -54,27 +73,6 @@ If toggling the existing entry does not restore the outline, grant access to the
 2. In **System Settings → Privacy & Security → Screen & System Audio Recording**, select **Quota Rail** and remove the entry with **−**.
 3. Use **+** to add the updated **Quota Rail.app** from Applications and enable access.
 4. Open Quota Rail again. If macOS asks you to quit and reopen the app, follow that prompt.
-
-## Supported subscriptions
-
-| Provider | What the overlay shows |
-| --- | --- |
-| Codex | Available quota windows and reset times, plus credits and banked resets when reported |
-| Claude Code | 5-hour and weekly quotas, when reported |
-| Antigravity | 5-hour and weekly quotas for Gemini and Claude/GPT |
-| Grok Build | Shared weekly quota and reset time |
-| OpenCode Go | 5-hour, weekly, and monthly quotas when reported |
-| Kimi | Quota windows and reset times from the signed-in Kimi CLI |
-
-Check the release notes for what ships in each download.
-
-## Quota details
-
-Click a ring to see its quota windows and reset times. In the gear menu, choose which subscriptions appear on the rail or keep it expanded.
-
-<p>
-  <img src="docs/images/quota-details-palette.png" width="420" alt="Codex popover showing weekly quota, time until reset, credits, and expiration dates for three banked resets">
-</p>
 
 ## Development
 
@@ -90,16 +88,19 @@ bun run watch-preview
 
 The watcher rebuilds and restarts the overlay when Swift files change. Pass `--full-demo` to start with sample data. In the terminal, press `d` to switch between live and demo quotas, `r` to restart the last successful build, or `s` to suspend and resume the preview. Swift edits made while suspended are rebuilt on resume.
 
+Application code lives in `Sources/App/`, overlay views and geometry in
+`Sources/Overlay/`, and provider adapters and their Python helpers in `Sources/Providers/`. Build and preview scripts live in `scripts/`.
+
 To build once:
 
 ```sh
 xcrun --sdk macosx swiftc -O -parse-as-library \
   -target arm64-apple-macosx14.0 -module-cache-path cache \
-  *.swift -o projector-overlay
-./projector-overlay
+  Sources/*/*.swift -o quota-rail
+./quota-rail
 ```
 
-Keep the provider helper scripts and `assets/` next to the executable. The Claude and Antigravity helpers use `/usr/bin/python3`. Source builds and untagged CI builds omit the updater.
+Source builds load provider scripts from `Sources/Providers/` and images from `assets/` next to the executable. The Claude and Antigravity helpers use `/usr/bin/python3`. Source builds and untagged CI builds omit the updater.
 
 For release setup, create a public prerelease tagged `update-feed` and keep its assets mutable. Set the repository variable `SPARKLE_PUBLIC_KEY` and the matching `SPARKLE_PRIVATE_KEY` secret using Sparkle's exported 32-byte seed format. Keep a backup of the private key outside Git. GitHub Actions publishes the ZIP from a stable `vX.Y.Z` tag, verifies the public download, then replaces the signed appcast on `update-feed`. If the ZIP was published but the feed step failed, rerun the macOS workflow with that tag as `release_tag`.
 

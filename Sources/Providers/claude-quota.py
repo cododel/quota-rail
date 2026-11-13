@@ -34,7 +34,7 @@ def read_quota(status):
     request = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={
         'Authorization': 'Bearer ' + token,
         'anthropic-beta': 'oauth-2025-04-20',
-        'User-Agent': 'projector-overlay/0.1'
+        'User-Agent': 'quota-rail/0.1'
     })
     # Do not forward authentication to a redirect destination.
     class NoRedirect(urllib.request.HTTPRedirectHandler):

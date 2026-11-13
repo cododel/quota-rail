@@ -1,6 +1,8 @@
 /cache/
 /projector-overlay
 /projector-overlay.next
+/quota-rail
+/quota-rail.next
 /checks/subscriptions-check
 __pycache__/
 .DS_Store

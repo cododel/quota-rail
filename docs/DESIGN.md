@@ -340,10 +340,10 @@ The concept and behavior come from the approved development conversation, summar
 [DEVELOPMENT_REVIEW.md](DEVELOPMENT_REVIEW.md), including the later approved color study.
 The numeric baseline was checked against the current rail, details, popover, contrast,
 geometry, motion and palette implementations. Source pointers for maintainers:
-[main.swift](../main.swift), [OverlayGeometry.swift](../OverlayGeometry.swift),
-[OverlayMotion.swift](../OverlayMotion.swift), [QuotaPalette.swift](../QuotaPalette.swift),
-[CodexDetails.swift](../CodexDetails.swift), [IndicatorPopover.swift](../IndicatorPopover.swift),
-[ContrastMonitor.swift](../ContrastMonitor.swift).
+[main.swift](../Sources/App/main.swift), [OverlayGeometry.swift](../Sources/Overlay/OverlayGeometry.swift),
+[OverlayMotion.swift](../Sources/Overlay/OverlayMotion.swift), [QuotaPalette.swift](../Sources/Overlay/QuotaPalette.swift),
+[CodexDetails.swift](../Sources/Overlay/CodexDetails.swift), [IndicatorPopover.swift](../Sources/Overlay/IndicatorPopover.swift),
+[ContrastMonitor.swift](../Sources/Overlay/ContrastMonitor.swift).
 
 The palette diagram is a deterministic illustration of the approved mapping. Existing
 README showcase/details images and the early geometry study are historical: they may

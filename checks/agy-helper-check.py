@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import sys
 
-helper = Path(__file__).resolve().parent.parent / 'agy-quota.py'
+helper = Path(__file__).resolve().parent.parent / 'Sources' / 'Providers' / 'agy-quota.py'
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     pidfile = root / 'pid'

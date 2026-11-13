@@ -23,7 +23,7 @@ struct ClaudeQuota {
     }
 
     static func read(status: inout ProviderStatus) -> CodexQuota? {
-        let helper = AppResources.directory.appendingPathComponent("claude-quota.py")
+        let helper = AppResources.providerHelper("claude-quota.py")
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")

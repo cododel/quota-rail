@@ -33,7 +33,7 @@ enum OverlayGeometry {
           <style>text{font-family:Arial,sans-serif;fill:#18202b} .dim{stroke:#245bc5;stroke-width:.4;fill:none} .guide{stroke:#7b9cd9;stroke-width:.3;stroke-dasharray:2 2;fill:none} .label{font-size:4px;fill:#245bc5} .measure{marker-start:url(#arrow);marker-end:url(#arrow)}</style>
         </defs>
         <rect y="-100" width="1200" height="1200" fill="#fafbfc"/>
-        <text x="48" y="48" font-size="26">Projector · overlay contour</text>
+        <text x="48" y="48" font-size="26">Quota Rail · overlay contour</text>
         <text x="48" y="76" font-size="14">Coordinates in pt · origin at body top-left · screen edge x = 40 · exported from Swift path</text>
         <text x="64" y="120" font-size="18">REST</text><text x="254" y="120" font-size="18">SETTINGS HOVER</text>
         <g transform="translate(64 200) scale(2.4)">

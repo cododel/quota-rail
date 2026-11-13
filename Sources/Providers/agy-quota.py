@@ -30,7 +30,7 @@ def capture(path):
 
 def read_quota(executable):
     parent_pid = os.getppid()
-    with tempfile.TemporaryDirectory(prefix='projector-quota-') as directory:
+    with tempfile.TemporaryDirectory(prefix='quota-rail-') as directory:
         path = os.path.join(directory, 'quota.json')
         command = shlex.join([sys.executable, os.path.abspath(__file__), '--capture', path])
         master, slave = pty.openpty()

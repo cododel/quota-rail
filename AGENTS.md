@@ -63,14 +63,14 @@ Before preparing a release, follow the [release notes guide](docs/RELEASING.md).
 
 | Responsibility | Owner |
 | --- | --- |
-| Panel, view state, hover, settings, quota refresh orchestration | `main.swift` |
-| Contour dimensions and drawing export | `OverlayGeometry.swift` and `EdgeShape` in `main.swift` |
-| Shared animation curve and durations | `OverlayMotion.swift` |
-| Remaining-quota colors and soft thresholds | `QuotaPalette.swift` |
-| Popover measurement, anchoring and dismissal | `IndicatorPopover.swift` (`RailPopover`) |
-| Installation/account/plan/quota status | `ProviderStatus.swift` |
-| Live/demo subscription composition | `OverlaySubscription.swift` |
-| Provider protocols | `*Quota.swift`, `agy-quota.py`, `claude-quota.py` |
-| Resource location and legacy preferences | `AppResources.swift` |
-| Updates and launch at login | `ReleaseUpdates.swift`, `LoginItem.swift` |
-| Watcher, packaging and publication | `watch.mjs`, `scripts/`, `.github/workflows/macos.yml` |
+| Panel, view state, hover, settings, quota refresh orchestration | `Sources/App/main.swift` |
+| Contour dimensions and drawing export | `Sources/Overlay/OverlayGeometry.swift` and `EdgeShape` in `Sources/App/main.swift` |
+| Shared animation curve and durations | `Sources/Overlay/OverlayMotion.swift` |
+| Remaining-quota colors and soft thresholds | `Sources/Overlay/QuotaPalette.swift` |
+| Popover measurement, anchoring and dismissal | `Sources/Overlay/IndicatorPopover.swift` (`RailPopover`) |
+| Installation/account/plan/quota status | `Sources/Providers/ProviderStatus.swift` |
+| Live/demo subscription composition | `Sources/Overlay/OverlaySubscription.swift` |
+| Provider protocols | `Sources/Providers/` |
+| Resource location | `Sources/App/AppResources.swift` |
+| Updates and launch at login | `Sources/App/ReleaseUpdates.swift`, `Sources/App/LoginItem.swift` |
+| Watcher, packaging and publication | `scripts/watch.mjs`, `scripts/`, `.github/workflows/macos.yml` |

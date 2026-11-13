@@ -16,6 +16,7 @@ resources="$contents/Resources"
 output=${QUOTA_RAIL_OUTPUT_DIR:-dist}
 mkdir -p "$contents/MacOS" "$resources" "$output"
 plist="$contents/Info.plist"
+executable=quota-rail
 cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -24,7 +25,7 @@ cat > "$plist" <<PLIST
   <key>CFBundleIdentifier</key><string>com.cododel.quota-rail</string>
   <key>CFBundleName</key><string>Quota Rail</string>
   <key>CFBundleIconFile</key><string>QuotaRail</string>
-  <key>CFBundleExecutable</key><string>projector-overlay</string>
+  <key>CFBundleExecutable</key><string>$executable</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$version</string>
   <key>CFBundleVersion</key><string>$version</string>
@@ -55,9 +56,10 @@ fi
 
 xcrun --sdk macosx swiftc -O -parse-as-library \
   -target arm64-apple-macosx14.0 -module-cache-path cache \
-  ${swift_flags[@]+"${swift_flags[@]}"} *.swift -o "$contents/MacOS/projector-overlay"
-cp agy-quota.py claude-quota.py "$resources/"
-cp -R assets "$resources/"
+  ${swift_flags[@]+"${swift_flags[@]}"} Sources/*/*.swift -o "$contents/MacOS/$executable"
+cp Sources/Providers/agy-quota.py Sources/Providers/claude-quota.py "$resources/"
+mkdir -p "$resources/assets"
+cp assets/{claude.png,antigravity.png,grok.svg,opencode.svg,kimi.svg,gpt.png} "$resources/assets/"
 cp assets/QuotaRail.icns "$resources/QuotaRail.icns"
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"

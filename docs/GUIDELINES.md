@@ -66,8 +66,7 @@ copying tokens into this document. The following safeguards protect those intera
 ## Application lifecycle and distribution
 
 - Keep bundle identity `com.cododel.quota-rail` stable. Bundle helpers and assets in the
-  `.app`; preserve adjacent-to-executable resources for source development. Migrate
-  legacy `projector-overlay` preferences without overwriting existing app preferences.
+  `.app` and resolve source-development resources from the checkout beside the executable.
 - On the first eligible release launch, register for Open at Login. Do not re-enable it
   after the user disables it. Failed registration must remain diagnosable and retryable;
   a missing registration is not a reason to skip the registration attempt. Development,

@@ -186,23 +186,23 @@ final class OverlayState: ObservableObject {
 
     @Published var fullDemo = OverlayState.forceFullDemo
         || (CommandLine.arguments.contains("--demo")
-            && UserDefaults.standard.bool(forKey: "projector.overlay.fullDemo")) {
+            && UserDefaults.standard.bool(forKey: "quotaRail.overlay.fullDemo")) {
         didSet {
             if showsDemoSettings {
-                UserDefaults.standard.set(fullDemo, forKey: "projector.overlay.fullDemo")
+                UserDefaults.standard.set(fullDemo, forKey: "quotaRail.overlay.fullDemo")
             }
             nextQuotaRefresh = .distantPast
         }
     }
     var nextQuotaRefresh = Date.distantPast
     private let demoStart = Date()
-    private static let hiddenSubscriptionsKey = "projector.overlay.hiddenSubscriptions"
+    private static let hiddenSubscriptionsKey = "quotaRail.overlay.hiddenSubscriptions"
     @Published private var hiddenSubscriptions = Set(
         UserDefaults.standard.stringArray(forKey: OverlayState.hiddenSubscriptionsKey) ?? []
     )
 
     private var orderKey: String {
-        fullDemo ? "projector.overlay.demoSubscriptionOrder" : "projector.overlay.subscriptionOrder"
+        fullDemo ? "quotaRail.overlay.demoSubscriptionOrder" : "quotaRail.overlay.subscriptionOrder"
     }
     @Published private var subscriptionOrders: [String: [String]] = [:]
 
@@ -752,10 +752,9 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-enum OverlayDemo {
+enum QuotaRailApp {
     @MainActor
     static func main() {
-        AppResources.migratePreferences()
         if CommandLine.arguments.contains("--export-contour") {
             print(OverlayGeometry.drawing())
             return

@@ -127,7 +127,7 @@ struct CodexQuota: Sendable {
         }
 
         do {
-            _ = try request(1, "initialize", ["clientInfo": ["name": "projector-overlay", "version": "0.1"]])
+            _ = try request(1, "initialize", ["clientInfo": ["name": "quota-rail", "version": "0.1"]])
             try send(["method": "initialized"])
             let auth = try request(2, "account/read", ["refreshToken": false])
             guard let account = auth["account"] as? [String: Any] else {
