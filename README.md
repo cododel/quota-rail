@@ -1,6 +1,6 @@
 # Quota Rail
 
-![Quota Rail app icon and wordmark above four quota indicator cards on dark and slate blue desktops](docs/images/readme-hero-composited.png)
+![Quota Rail app icon and wordmark above four quota indicator cards and an open Codex details popover](docs/images/readme-hero-composited.png)
 
 A native macOS overlay for checking how much of your AI subscriptions you have left. Hover over the right edge of the screen to reveal your quotas, then click a ring for details.
 
@@ -63,7 +63,7 @@ Check the release notes for what ships in each download.
 Click a ring to see its quota windows and reset times. In the gear menu, choose which subscriptions appear on the rail or keep it expanded.
 
 <p>
-  <img src="docs/images/quota-details-palette.png" width="420" alt="Codex popover showing weekly quota, credits, and expiration dates for three banked resets">
+  <img src="docs/images/quota-details-palette.png" width="420" alt="Codex popover showing weekly quota, time until reset, credits, and expiration dates for three banked resets">
 </p>
 
 ## Development
