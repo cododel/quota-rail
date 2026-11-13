@@ -2,23 +2,48 @@
 
 A native macOS overlay for checking how much of your AI subscriptions you have left. Hover over the right edge of the screen to reveal your quotas, then click a ring for details.
 
-[Download for Apple Silicon](https://github.com/cododel/quota-rail/releases) · [Supported subscriptions](#supported-subscriptions) · [Build from source](#development)
+[Download for Apple Silicon](https://github.com/cododel/quota-rail/releases/latest) · [Installation](#installation) · [Supported subscriptions](#supported-subscriptions) · [Build from source](#development)
 
 ![Quota Rail on dark and blue backgrounds, with the settings button at rest and on hover](docs/images/showcase.png)
 
-## Install
+## Installation
 
 Requires an Apple Silicon Mac with macOS 14 or later.
 
-1. Download `quota-rail-macos-arm64.zip` from [GitHub Releases](https://github.com/cododel/quota-rail/releases).
+1. Download `quota-rail-macos-arm64.zip` from the [latest GitHub release](https://github.com/cododel/quota-rail/releases/latest).
 2. Extract the archive, move `Quota Rail.app` to a writable Applications folder, and open it.
-3. Sign in through the CLI for each subscription you want to see. Quota Rail uses those existing sign-ins and shows providers when quota data is available.
+
+### If macOS blocks the first launch
+
+Quota Rail is distributed without Apple notarization, so macOS may show this Gatekeeper warning:
+
+> Apple could not verify “Quota Rail” is free of malware that may harm your Mac or compromise your privacy.
+
+Proceed only if you downloaded the ZIP from the official release linked above and trust the copy you downloaded.
+
+1. Click **Done** in the warning.
+
+   <img src="docs/images/install-gatekeeper-warning.png" width="320" alt="Quota Rail Not Opened warning with the Done button">
+
+2. Open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway** next to the message about Quota Rail.
+
+   <img src="docs/images/install-open-anyway-settings.png" width="680" alt="Privacy & Security settings with Open Anyway highlighted for Quota Rail">
+
+3. In the confirmation dialog, click **Open Anyway** again (or **Open**, depending on the macOS version). Authenticate if prompted.
+
+   <img src="docs/images/install-open-anyway-confirmation.png" width="360" alt="Open Quota Rail confirmation dialog with Open Anyway highlighted">
+
+macOS saves an exception for this app. See [Apple's guide to opening apps on your Mac](https://support.apple.com/en-us/102445).
+
+### After opening Quota Rail
+
+Sign in through the CLI for each subscription you want to see. Quota Rail uses those existing sign-ins and shows providers when quota data is available.
 
 On first launch, Quota Rail registers to open automatically when you sign in to macOS. You can turn this off under **System Settings → General → Login Items & Extensions**.
 
 Quota Rail checks for updates on launch. You can also select **Check for Updates** in the gear menu. Confirm installation in the update dialog to let Sparkle verify the download, replace the app, and relaunch it.
 
-The app is distributed without Apple notarization, so macOS may show a Gatekeeper warning on first launch. If you're upgrading from v0.0.1, quit the old `projector-overlay` process, download the new ZIP once, and open `Quota Rail.app`. Your saved subscription visibility carries over.
+If you're upgrading from v0.0.1, quit the old `projector-overlay` process, download the new ZIP once, and open `Quota Rail.app`. Your saved subscription visibility carries over.
 
 ## Supported subscriptions
 
