@@ -1,0 +1,53 @@
+name: macOS
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run checks
+        run: |
+          xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 -module-cache-path cache CodexQuota.swift AntigravityQuota.swift ClaudeQuota.swift OverlaySubscription.swift checks/SubscriptionsCheck.swift -o checks/subscriptions-check
+          ./checks/subscriptions-check
+          /usr/bin/python3 checks/agy-helper-check.py
+      - name: Build archive
+        shell: bash
+        run: |
+          version=0.0.0
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            version=${GITHUB_REF_NAME#v}
+          fi
+          bash scripts/package.sh "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quota-rail-macos-arm64
+          path: dist/quota-rail-macos-arm64.zip
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: quota-rail-macos-arm64
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" quota-rail-macos-arm64.zip \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
