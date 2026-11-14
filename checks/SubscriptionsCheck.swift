@@ -3,7 +3,7 @@ import SwiftUI
 
 @main
 struct SubscriptionsCheck {
-    static func main() {
+    static func main() async {
         AntigravityQuota.handleStatusLineCallback()
         let arguments = CommandLine.arguments
         if arguments.count == 4, arguments[1] == "--check-antigravity-fixture",
@@ -188,6 +188,8 @@ struct SubscriptionsCheck {
             {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":41,
             "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2027-01-20T14:15:30.192Z"}}}
             """.utf8)
+        await checkGrokRecovery()
+        await checkGrokHelperLifetime()
         let grok = GrokQuota.parse(grokPayload, now: now)!
         precondition(grok.remaining == 59 && grok.windows.map(\.label) == ["7d"])
         precondition(GrokQuota.parse(grokPayload, now: now.addingTimeInterval(604_800)) == nil)
@@ -239,4 +241,71 @@ struct SubscriptionsCheck {
         print("PASS: empty state without live quotas, demo fixtures only in full demo")
         print("PASS: quota palette zones, soft boundaries, endpoints and provider-independent colors")
     }
+
+    private static func checkGrokRecovery() async {
+        let reset = Date().addingTimeInterval(3600).ISO8601Format()
+        let payload = Data("""
+            {"creditUsagePercent":41,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"\(reset)"}}
+            """.utf8)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let auth = directory.appendingPathComponent("auth.json")
+        func writeToken(_ token: String, expiry: TimeInterval) {
+            let data = Data("""
+                {"fixture":{"auth_mode":"oidc","key":"\(token)","expires_at":\(expiry)}}
+                """.utf8)
+            try! data.write(to: auth, options: .atomic)
+        }
+
+        let future = Date().timeIntervalSince1970 + 3600
+        for (expiry, firstCode, retryCode, expectedTokens, expectsQuota) in [
+            (1.0, 200, 200, ["renewed"], true),
+            (future, 401, 200, ["original", "renewed"], true),
+            (future, 401, 401, ["original", "renewed"], false),
+            (future, 401, 500, ["original", "renewed"], false),
+            (future, 401, 0, ["original", "renewed"], false),
+            (future, 200, 200, ["original"], true),
+            (future, 500, 200, ["original"], false)
+        ] {
+            writeToken("original", expiry: expiry)
+            var refreshes = 0
+            var tokens = [String]()
+            var status = ProviderStatus("Grok Build", executable: "sh")
+            let quota = await GrokQuota.read(at: auth, status: &status, refresh: {
+                refreshes += 1
+                writeToken("renewed", expiry: future)
+            }, request: { token in
+                tokens.append(token)
+                let code = token == "original" ? firstCode : retryCode
+                return code == 0 ? nil : (code, payload)
+            })
+            precondition(tokens == expectedTokens)
+            precondition(refreshes == (expectedTokens.contains("renewed") ? 1 : 0))
+            precondition((quota != nil) == expectsQuota)
+            if firstCode == 401 {
+                precondition(status.authorization == (expectsQuota ? "Signed in" : "Credentials rejected"))
+            }
+        }
+    }
+
+    private static func checkGrokHelperLifetime() async {
+        let helper = GrokQuota.SessionRefresh(
+            waitLimit: .milliseconds(50), lifetimeLimit: .milliseconds(800),
+            pollInterval: .milliseconds(10), arguments: ["30"], executable: { "/bin/sleep" }
+        )
+        await helper.run()
+        let runningAfterWait = await helper.isRunning
+        precondition(runningAfterWait, "The quota wait must leave the helper running")
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(4))
+        while await helper.isRunning, clock.now < deadline {
+            try! await Task.sleep(for: .milliseconds(20))
+        }
+        let runningAfterDeadline = await helper.isRunning
+        precondition(!runningAfterDeadline, "The watchdog must stop the helper without another poll")
+        print("PASS: Grok caller deadline and independent helper cleanup")
+    }
+
 }

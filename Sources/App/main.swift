@@ -689,7 +689,10 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                     async let claude = Task.detached(priority: .utility) {
                         await ProviderStatus.read("Claude", executable: "claude") { await ClaudeQuota.read(status: &$0) }
                     }.value
-                    async let grok = ProviderStatus.read("Grok Build", executable: "grok") { await GrokQuota.read(status: &$0) }
+                    let grokPreviouslyRejected = state.grokSnapshot.status?.authorization == "Credentials rejected"
+                    async let grok = ProviderStatus.read("Grok Build", executable: "grok") {
+                        await GrokQuota.read(status: &$0, previouslyRejected: grokPreviouslyRejected)
+                    }
                     async let openCodeGo = ProviderStatus.read("OpenCode Go", executable: "opencode") { await OpenCodeGoQuota.read(status: &$0) }
                     let kimiBin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".kimi-code/bin").path
                     async let kimi = ProviderStatus.read("Kimi", executable: "kimi", extraPaths: [kimiBin]) {

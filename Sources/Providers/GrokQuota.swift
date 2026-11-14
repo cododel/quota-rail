@@ -1,7 +1,10 @@
+import Darwin
 import Foundation
 
 enum GrokQuota {
     private struct Credential: Decodable {
+        var isExpired: Bool { expiration != 0 && expiration <= Date().timeIntervalSince1970 }
+
         let auth_mode: String?
         let key: String?
         let expiration: Double
@@ -48,14 +51,36 @@ enum GrokQuota {
         }
     }
 
-    static func read(status: inout ProviderStatus) async -> CodexQuota? {
+    static func read(status: inout ProviderStatus, previouslyRejected: Bool = false) async -> CodexQuota? {
+        if previouslyRejected { status.authorization = "Credentials rejected" }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let directory = ProcessInfo.processInfo.environment["GROK_HOME"]
             .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
             ?? home.appendingPathComponent(".grok", isDirectory: true)
-        guard let token = readAccessToken(at: directory.appendingPathComponent("auth.json"),
-                                          status: &status) else { return nil }
+        return await read(at: directory.appendingPathComponent("auth.json"), status: &status,
+                          refresh: { await sessionRefresh.run() }, request: requestBilling)
+    }
 
+    static func read(at path: URL, status: inout ProviderStatus,
+                     refresh: () async -> Void,
+                     request: (String) async -> (Int, Data)?) async -> CodexQuota? {
+        guard let credential = readCredential(at: path, status: &status),
+              let token = credential.key else { return nil }
+
+        if !credential.isExpired {
+            guard let initial = await request(token) else { return nil }
+            if initial.0 != 401 { return apply(initial, status: &status) }
+            status.authorization = "Credentials rejected"
+        }
+        guard !Task.isCancelled else { return nil }
+        await refresh()
+        guard !Task.isCancelled,
+              let renewed = readCredential(at: path, status: &status),
+              !renewed.isExpired, let renewedToken = renewed.key else { return nil }
+        return apply(await request(renewedToken), status: &status)
+    }
+
+    private static func requestBilling(_ token: String) async -> (Int, Data)? {
         let url = URL(string: "https://cli-chat-proxy.grok.com/v1/billing?format=credits")!
         var request = URLRequest(url: url, timeoutInterval: 8)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -66,10 +91,15 @@ enum GrokQuota {
         defer { session.finishTasksAndInvalidate() }
         guard let (payload, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else { return nil }
-        if http.statusCode == 401 {
+        return (http.statusCode, payload)
+    }
+
+    private static func apply(_ response: (Int, Data)?, status: inout ProviderStatus) -> CodexQuota? {
+        guard let (code, payload) = response else { return nil }
+        if code == 401 {
             status.authorization = "Credentials rejected"
         }
-        guard http.statusCode == 200 else { return nil }
+        guard code == 200 else { return nil }
         status.authorization = "Signed in"
         if let billing = decodeBilling(payload),
            billing.isUnifiedBillingUser == true,
@@ -80,14 +110,18 @@ enum GrokQuota {
     }
 
     static func readAccessToken(at path: URL, status: inout ProviderStatus) -> String? {
+        readCredential(at: path, status: &status)?.key
+    }
+
+    private static func readCredential(at path: URL, status: inout ProviderStatus) -> Credential? {
         do {
             let data = try Data(contentsOf: path)
             let credentials = try JSONDecoder().decode([String: Credential].self, from: data)
-            let token = accessToken(from: credentials)
-            if token == nil { status.authorization = "Sign-in required" }
+            let token = selectCredential(from: credentials)
+            if token == nil && status.authorization != "Credentials rejected" { status.authorization = "Sign-in required" }
             return token
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
-            status.authorization = "Sign-in required"
+            if status.authorization != "Credentials rejected" { status.authorization = "Sign-in required" }
             return nil
         } catch {
             return nil
@@ -96,13 +130,76 @@ enum GrokQuota {
 
     static func accessToken(from data: Data) -> String? {
         guard let credentials = try? JSONDecoder().decode([String: Credential].self, from: data) else { return nil }
-        return accessToken(from: credentials)
+        return selectCredential(from: credentials)?.key
     }
 
-    private static func accessToken(from credentials: [String: Credential]) -> String? {
+    private static func selectCredential(from credentials: [String: Credential]) -> Credential? {
         return credentials.values
             .filter { $0.auth_mode == "oidc" && $0.key?.isEmpty == false }
-            .max { $0.expiration < $1.expiration }?.key
+            .max { $0.expiration < $1.expiration }
+    }
+
+    private static let sessionRefresh = SessionRefresh()
+
+    actor SessionRefresh {
+        private let clock = ContinuousClock()
+        private let waitLimit: Duration
+        private let lifetimeLimit: Duration
+        private let pollInterval: Duration
+        private let arguments: [String]
+        private let executable: @Sendable () -> String?
+        private var process: Process?
+        private var waitDeadline: ContinuousClock.Instant?
+        private var retryAfter: ContinuousClock.Instant?
+
+        init(waitLimit: Duration = .seconds(60), lifetimeLimit: Duration = .seconds(180),
+             pollInterval: Duration = .milliseconds(200), arguments: [String] = ["models"],
+             executable: @escaping @Sendable () -> String? = { ProviderStatus.executablePath("grok") }) {
+            self.waitLimit = waitLimit
+            self.lifetimeLimit = lifetimeLimit
+            self.pollInterval = pollInterval
+            self.arguments = arguments
+            self.executable = executable
+        }
+
+        var isRunning: Bool { process?.isRunning == true }
+
+        func run() async {
+            if !isRunning {
+                process = nil
+                guard !Task.isCancelled, retryAfter.map({ clock.now >= $0 }) ?? true,
+                      let executable = executable() else { return }
+                let child = Process()
+                child.executableURL = URL(fileURLWithPath: executable)
+                child.arguments = arguments
+                child.currentDirectoryURL = FileManager.default.temporaryDirectory
+                child.standardInput = FileHandle.nullDevice
+                child.standardOutput = FileHandle.nullDevice
+                child.standardError = FileHandle.nullDevice
+                retryAfter = clock.now.advanced(by: .seconds(120))
+                do { try child.run() } catch { return }
+                process = child
+                waitDeadline = clock.now.advanced(by: waitLimit)
+                let killDeadline = clock.now.advanced(by: lifetimeLimit)
+                Task { await supervise(child, until: killDeadline) }
+            }
+            guard let child = process, let deadline = waitDeadline else { return }
+            while child.isRunning && clock.now < deadline {
+                do { try await clock.sleep(until: min(deadline, clock.now.advanced(by: pollInterval))) }
+                catch { return }
+            }
+        }
+
+        private func supervise(_ child: Process, until deadline: ContinuousClock.Instant) async {
+            // Keep supervision alive after the quota caller stops waiting or is cancelled.
+            while child.isRunning && clock.now < deadline {
+                try? await clock.sleep(until: min(deadline, clock.now.advanced(by: pollInterval)))
+            }
+            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+            // Foundation reaps the child. Keep it registered until it has actually exited.
+            while child.isRunning { try? await Task.sleep(for: pollInterval) }
+            if process === child { process = nil }
+        }
     }
 
     private static func decodeBilling(_ data: Data) -> Billing? {
