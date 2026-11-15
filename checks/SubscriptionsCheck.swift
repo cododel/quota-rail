@@ -246,28 +246,80 @@ struct SubscriptionsCheck {
         try! FileManager.default.createDirectory(at: credentialDirectory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: credentialDirectory) }
         let credential = credentialDirectory.appendingPathComponent("kimi-code.json")
-        try! Data(#"{"access_token":"expired-fixture","expires_at":1800000000}"#.utf8).write(to: credential)
-        var kimiStatus = ProviderStatus("Kimi", executable: "kimi")
-        let expired = await KimiQuota.read(at: credential, status: &kimiStatus, now: now) { _ in
+        let lock = credentialDirectory.appendingPathComponent("oauth/kimi-code.lock")
+        let expiredCredential = Data("""
+            {"access_token":"expired-fixture","refresh_token":"refresh-fixture","expires_at":1800000000}
+            """.utf8)
+        try! expiredCredential.write(to: credential)
+        var kimiStatus = ProviderStatus("Kimi", executable: "true", extraPaths: ["/usr/bin"])
+        try! FileManager.default.createDirectory(at: lock, withIntermediateDirectories: true)
+        let busy = await KimiQuota.read(at: credential, lock: lock, status: &kimiStatus, now: { now }, renew: { _ in
+            preconditionFailure("Kimi holds the lock")
+        }, request: { _ in
             preconditionFailure("An expired token must not be sent")
-        }
-        precondition(expired == nil && !kimiStatus.needsSignIn)
-        try! Data(#"{"access_token":"renewed-fixture","expires_at":1800003600}"#.utf8).write(to: credential)
-        let renewed = await KimiQuota.read(at: credential, status: &kimiStatus, now: now) { token in
+        })
+        precondition(busy == nil && FileManager.default.fileExists(atPath: lock.path))
+        // A lock whose owner exited can be reclaimed using the CLI's stale timeout.
+        try! FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -10)],
+                                               ofItemAtPath: lock.path)
+        let renewed = await KimiQuota.read(at: credential, lock: lock, status: &kimiStatus, now: { now }, renew: { token in
+            precondition(token == "refresh-fixture")
+            precondition(FileManager.default.fileExists(atPath: lock.path))
+            return (200, Data("""
+                {"access_token":"renewed-fixture","refresh_token":"rotated-fixture","expires_in":3600}
+                """.utf8))
+        }, request: { token in
             precondition(token == "renewed-fixture")
+            precondition(!FileManager.default.fileExists(atPath: lock.path))
             return (200, kimiDirect)
-        }
+        })
         precondition(renewed?.windows.map(\.remaining) == [100, 75, 50, 0])
         precondition(kimiStatus.authorization == "Signed in")
+        let saved = try! JSONSerialization.jsonObject(with: Data(contentsOf: credential)) as! [String: Any]
+        precondition(saved["refresh_token"] as? String == "rotated-fixture")
+        precondition(saved["expires_at"] as? Double == 1_800_003_600)
+        let permissions = try! FileManager.default.attributesOfItem(atPath: credential.path)[.posixPermissions] as! Int
+        precondition(permissions == 0o600)
+
         var kimiSnapshot = ProviderQuotaSnapshot<CodexQuota>()
         kimiSnapshot.update(renewed, status: kimiStatus, now: now)
         var rejectedStatus = ProviderStatus("Kimi", executable: "true", extraPaths: ["/usr/bin"])
-        let rejected = await KimiQuota.read(at: credential, status: &rejectedStatus, now: now) { _ in
-            (401, kimiDirect)
-        }
+        let rejected = await KimiQuota.read(at: credential, lock: lock, status: &rejectedStatus, now: { now }, renew: { token in
+            precondition(token == "rotated-fixture")
+            return (503, Data("{}".utf8))
+        }, request: { _ in (401, kimiDirect) })
         kimiSnapshot.update(rejected, status: rejectedStatus, now: now)
         precondition(rejected == nil && !rejectedStatus.needsSignIn)
         precondition(kimiSnapshot.isStale && kimiSnapshot.quota?.windows.count == 4)
+        precondition(!FileManager.default.fileExists(atPath: lock.path))
+
+        let peerRenewed = await KimiQuota.read(at: credential, lock: lock, status: &kimiStatus, now: { now }, renew: { _ in
+            preconditionFailure("Use the newer token written by Kimi CLI")
+        }, request: { token in
+            if token == "renewed-fixture" {
+                try! FileManager.default.createDirectory(at: lock, withIntermediateDirectories: false)
+                try! Data("""
+                    {"access_token":"peer-fixture","refresh_token":"peer-refresh","expires_at":1800007200}
+                    """.utf8).write(to: credential, options: .atomic)
+                try! FileManager.default.removeItem(at: lock)
+                return (401, Data())
+            }
+            precondition(token == "peer-fixture")
+            return (200, kimiDirect)
+        })
+        precondition(peerRenewed?.windows.count == 4)
+
+        try! expiredCredential.write(to: credential)
+        let signedOutDuringRefresh = await KimiQuota.read(at: credential, lock: lock, status: &kimiStatus, now: { now }, renew: { _ in
+            try! FileManager.default.removeItem(at: credential)
+            return (200, Data("""
+                {"access_token":"unused-fixture","refresh_token":"unused-refresh","expires_in":3600}
+                """.utf8))
+        }, request: { _ in
+            preconditionFailure("A concurrent sign-out must win")
+        })
+        precondition(signedOutDuringRefresh == nil && !FileManager.default.fileExists(atPath: credential.path))
+        precondition(try! FileManager.default.contentsOfDirectory(atPath: credentialDirectory.path) == ["oauth"])
         let kimiEmpty = Data(#"{"data":{"kind":"ok","quota":{"usages":{},"extraUsage":null}}}"#.utf8)
         precondition(KimiQuota.parse(kimiEmpty, now: now) == nil)
         let kimiSummary = Data("""
