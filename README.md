@@ -15,7 +15,9 @@ A native macOS overlay for checking how much of your AI subscriptions you have l
 | Antigravity | 5-hour and weekly quotas for Gemini and Claude/GPT |
 | Grok Build | Shared weekly quota and reset time |
 | OpenCode Go | 5-hour, weekly, and monthly quotas when reported |
-| Kimi | Quota windows and reset times from the signed-in Kimi CLI |
+| Kimi | Quota windows and reset times from Kimi using the CLI sign-in |
+
+Quota Rail reads Kimi quota directly. If the OAuth token expires, quota updates resume after Kimi CLI renews the sign-in.
 
 Check the release notes for what ships in each download.
 

@@ -228,6 +228,46 @@ struct SubscriptionsCheck {
         precondition(modernWindows?.map(\.remaining) == [100, 75, 50, 0])
         precondition(modernWindows?.first?.reset == Date(timeIntervalSince1970: 1_800_454_530.192))
         precondition(modernWindows?[1].reset == Date(timeIntervalSince1970: 1_800_454_530))
+        let kimiDirect = Data("""
+            {"usages":{
+              "limit_5h":{"used_ratio":0,"reset_time":"2027-01-20T14:15:30.192Z"},
+              "limit_7d":{"used_ratio":0.25,"reset_time":"2027-01-20T14:15:30Z"},
+              "limit_month_total":{"used_ratio":"0.5","reset_time":"2027-02-01T00:00:00Z"},
+              "limit_month_code":{"used_ratio":1,"reset_time":"2027-02-02T00:00:00Z"}
+            }}
+            """.utf8)
+        let directWindows = KimiQuota.parse(kimiDirect, now: now)?.windows
+        precondition(directWindows?.map(\.label) == ["5h", "7d", "Monthly", "Monthly code"])
+        precondition(directWindows?.map(\.remaining) == [100, 75, 50, 0])
+        precondition(directWindows?[2].reset == Date(timeIntervalSince1970: 1_801_440_000))
+        precondition(directWindows?[3].reset == Date(timeIntervalSince1970: 1_801_526_400))
+        precondition(KimiQuota.parse(Data("{}".utf8), now: now) == nil)
+        let credentialDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try! FileManager.default.createDirectory(at: credentialDirectory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: credentialDirectory) }
+        let credential = credentialDirectory.appendingPathComponent("kimi-code.json")
+        try! Data(#"{"access_token":"expired-fixture","expires_at":1800000000}"#.utf8).write(to: credential)
+        var kimiStatus = ProviderStatus("Kimi", executable: "kimi")
+        let expired = await KimiQuota.read(at: credential, status: &kimiStatus, now: now) { _ in
+            preconditionFailure("An expired token must not be sent")
+        }
+        precondition(expired == nil && !kimiStatus.needsSignIn)
+        try! Data(#"{"access_token":"renewed-fixture","expires_at":1800003600}"#.utf8).write(to: credential)
+        let renewed = await KimiQuota.read(at: credential, status: &kimiStatus, now: now) { token in
+            precondition(token == "renewed-fixture")
+            return (200, kimiDirect)
+        }
+        precondition(renewed?.windows.map(\.remaining) == [100, 75, 50, 0])
+        precondition(kimiStatus.authorization == "Signed in")
+        var kimiSnapshot = ProviderQuotaSnapshot<CodexQuota>()
+        kimiSnapshot.update(renewed, status: kimiStatus, now: now)
+        var rejectedStatus = ProviderStatus("Kimi", executable: "true", extraPaths: ["/usr/bin"])
+        let rejected = await KimiQuota.read(at: credential, status: &rejectedStatus, now: now) { _ in
+            (401, kimiDirect)
+        }
+        kimiSnapshot.update(rejected, status: rejectedStatus, now: now)
+        precondition(rejected == nil && !rejectedStatus.needsSignIn)
+        precondition(kimiSnapshot.isStale && kimiSnapshot.quota?.windows.count == 4)
         let kimiEmpty = Data(#"{"data":{"kind":"ok","quota":{"usages":{},"extraUsage":null}}}"#.utf8)
         precondition(KimiQuota.parse(kimiEmpty, now: now) == nil)
         let kimiSummary = Data("""

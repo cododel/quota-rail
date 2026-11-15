@@ -1,9 +1,8 @@
 import CoreFoundation
-import Darwin
 import Foundation
 
 enum KimiQuota {
-    private final class LocalOnly: NSObject, URLSessionTaskDelegate {
+    private final class NoRedirects: NSObject, URLSessionTaskDelegate {
         func urlSession(_ session: URLSession, task: URLSessionTask,
                         willPerformHTTPRedirection response: HTTPURLResponse,
                         newRequest request: URLRequest,
@@ -12,102 +11,62 @@ enum KimiQuota {
         }
     }
 
+    private struct Credential: Decodable {
+        let accessToken: String
+        let expiresAt: Double
+
+        enum CodingKeys: String, CodingKey {
+            case accessToken = "access_token"
+            case expiresAt = "expires_at"
+        }
+    }
+
     static func read(status: inout ProviderStatus) async -> CodexQuota? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let paths = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
-            + [home.appendingPathComponent(".kimi-code/bin").path,
-               home.appendingPathComponent(".local/bin").path, "/opt/homebrew/bin", "/usr/local/bin"]
-        guard let executable = paths.filter({ $0.hasPrefix("/") })
-            .map({ URL(fileURLWithPath: $0).appendingPathComponent("kimi") })
-            .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }),
-              let port = loopbackPort(), !Task.isCancelled else { return nil }
+        guard status.cliInstalled, !Task.isCancelled else { return nil }
+        let environment = ProcessInfo.processInfo.environment
+        let home = environment["KIMI_CODE_HOME"].flatMap { value in
+            value.isEmpty ? nil : URL(fileURLWithPath: value, isDirectory: true)
+        } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".kimi-code")
+        let path = home.appendingPathComponent("credentials/kimi-code.json")
+        let base = environment["KIMI_CODE_BASE_URL"] ?? "https://api.kimi.com/coding/v1"
+        let normalizedBase = base.hasSuffix("/") ? String(base.dropLast()) : base
+        guard ["https://api.kimi.com/coding/v1", "https://api.kimi.ai/coding/v1"].contains(normalizedBase),
+              let url = URL(string: normalizedBase + "/usages") else { return nil }
 
-        let process = Process()
-        let pipe = Pipe()
-        let output = pipe.fileHandleForReading
-        guard fcntl(output.fileDescriptor, F_SETFL, O_NONBLOCK) != -1 else { return nil }
-        process.executableURL = executable
-        process.arguments = ["web", "--no-open", "--host", "127.0.0.1", "--port", String(port), "--log-level", "silent"]
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do { try process.run() } catch { return nil }
-        defer {
-            if process.isRunning {
-                process.terminate()
-                DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
-                    if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-                }
-            }
-            try? output.close()
+        return await read(at: path, status: &status) { token in
+            var request = URLRequest(url: url, timeoutInterval: 8)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForResource = 8
+            let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+            defer { session.finishTasksAndInvalidate() }
+            guard let (data, response) = try? await session.data(for: request),
+                  let response = response as? HTTPURLResponse else { return nil }
+            return (response.statusCode, data)
         }
-
-        guard let token = await startupToken(from: output, port: port) else { return nil }
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/v1/oauth/usage")!,
-                                 timeoutInterval: 5)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.connectionProxyDictionary = [:]
-        configuration.timeoutIntervalForResource = 5
-        let session = URLSession(configuration: configuration, delegate: LocalOnly(), delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
-        guard let (data, response) = try? await session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        if let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            let payload = root["data"] as? [String: Any] ?? root
-            if payload["kind"] as? String == "ok" {
-                status.authorization = "Signed in"
-            } else if let message = payload["message"] as? String,
-                      message.localizedCaseInsensitiveContains("login") {
-                status.authorization = "Sign-in required"
-            }
-        }
-        return parse(data)
     }
 
-    private static func startupToken(from output: FileHandle, port: UInt16) async -> String? {
-        let clock = ContinuousClock()
-        let deadline = clock.now + .seconds(8)
-        let pattern = "Local:\\s+http://127\\.0\\.0\\.1:\(port)/#token=([A-Za-z0-9_-]+)(?=\\s|\\u001b)"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        var buffer = Data()
-        var bytes = [UInt8](repeating: 0, count: 4096)
-        while clock.now < deadline && !Task.isCancelled {
-            let count = bytes.withUnsafeMutableBytes { Darwin.read(output.fileDescriptor, $0.baseAddress, $0.count) }
-            if count == 0 { return nil }
-            if count > 0 {
-                buffer.append(contentsOf: bytes.prefix(count))
-                guard buffer.count <= 64 * 1024 else { return nil }
-                let text = String(decoding: buffer, as: UTF8.self)
-                if let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-                   let range = Range(match.range(at: 1), in: text) {
-                    return String(text[range])
-                }
-            } else if errno != EAGAIN && errno != EINTR {
-                return nil
-            }
-            do { try await Task.sleep(for: .milliseconds(40)) } catch { return nil }
+    static func read(at path: URL, status: inout ProviderStatus, now: Date = Date(),
+                     request: (String) async -> (Int, Data)?) async -> CodexQuota? {
+        let credential: Credential
+        do {
+            credential = try JSONDecoder().decode(Credential.self, from: Data(contentsOf: path))
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            status.authorization = "Sign-in required"
+            return nil
+        } catch {
+            return nil
         }
-        return nil
-    }
-
-    private static func loopbackPort() -> UInt16? {
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
-        defer { close(fd) }
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr.s_addr = in_addr_t(INADDR_LOOPBACK).bigEndian
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        return withUnsafeMutablePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-                guard bind(fd, socketAddress, length) == 0,
-                      getsockname(fd, socketAddress, &length) == 0 else { return nil }
-                return UInt16(bigEndian: pointer.pointee.sin_port)
-            }
+        guard !credential.accessToken.isEmpty else {
+            status.authorization = "Sign-in required"
+            return nil
         }
+        // Kimi owns token rotation. Read its credential file again on the next poll.
+        guard credential.expiresAt > now.timeIntervalSince1970, !Task.isCancelled,
+              let (code, data) = await request(credential.accessToken), code == 200 else { return nil }
+        status.authorization = "Signed in"
+        return parse(data, now: now)
     }
 
     static func parse(_ data: Data, now: Date = Date()) -> CodexQuota? {
@@ -115,15 +74,19 @@ enum KimiQuota {
         let payload = root["data"] as? [String: Any] ?? root
         guard payload["kind"] as? String != "error" else { return nil }
         var windows: [CodexQuota.LimitWindow] = []
-        if let quota = payload["quota"] as? [String: Any],
-           let usages = quota["usages"] as? [String: Any] {
-            let periods: [(String, Int?)] = [
-                ("limit5h", 300), ("limit7d", 10_080), ("monthTotal", nil), ("monthCode", nil)
+        let directUsages = payload["usages"] as? [String: Any]
+        let wrappedUsages = (payload["quota"] as? [String: Any])?["usages"] as? [String: Any]
+        if let usages = directUsages ?? wrappedUsages {
+            let periods: [(id: String, wireKey: String, minutes: Int?)] = [
+                ("limit5h", "limit_5h", 300), ("limit7d", "limit_7d", 10_080),
+                ("monthTotal", "limit_month_total", nil), ("monthCode", "limit_month_code", nil)
             ]
-            for (id, minutes) in periods {
-                guard let usage = usages[id] as? [String: Any],
-                      let used = number(usage["usedRatio"]), (0...1).contains(used) else { continue }
-                let reset = (usage["resetAt"] as? String).flatMap { value in
+            let ratioKey = directUsages == nil ? "usedRatio" : "used_ratio"
+            let resetKey = directUsages == nil ? "resetAt" : "reset_time"
+            for (id, wireKey, minutes) in periods {
+                guard let usage = usages[directUsages == nil ? id : wireKey] as? [String: Any],
+                      let used = number(usage[ratioKey]), (0...1).contains(used) else { continue }
+                let reset = (usage[resetKey] as? String).flatMap { value in
                     let formatter = ISO8601DateFormatter()
                     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                     if let date = formatter.date(from: value) { return date }
