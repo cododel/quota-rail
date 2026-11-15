@@ -17,7 +17,7 @@ A native macOS overlay for checking how much of your AI subscriptions you have l
 | OpenCode Go | 5-hour, weekly, and monthly quotas when reported |
 | Kimi | Quota windows and reset times from Kimi using the CLI sign-in |
 
-Quota Rail reads Kimi quota directly and renews expired OAuth tokens using the same refresh lock as Kimi CLI.
+Quota Rail reads quota through the installed Kimi CLI’s local API. Kimi handles account selection and OAuth renewal. The local server exits after each read.
 
 Check the release notes for what ships in each download.
 

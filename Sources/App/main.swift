@@ -648,6 +648,8 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         await self?.refreshQuotas()
     }
     private var outsideClickMonitor: Any?
+    private var kimiRefresh: Task<(CodexQuota?, ProviderStatus), Never>?
+    private var terminating = false
     private let state = OverlayState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -679,12 +681,13 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
             }
         }
         state.quotaVisibilityChanged = { [weak self] in
-            guard let self else { return }
+            guard let self, !terminating else { return }
             quotaPolling.setActive(state.expanded && !state.fullDemo)
         }
     }
 
     private func refreshQuotas() async {
+        guard !terminating else { return }
         async let codex = Task.detached(priority: .utility) {
             var status = ProviderStatus("Codex", executable: "codex")
             let result = CodexQuota.read(status: &status)
@@ -702,14 +705,17 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
             await GrokQuota.read(status: &$0, previouslyRejected: grokPreviouslyRejected)
         }
         async let openCodeGo = ProviderStatus.read("OpenCode Go", executable: "opencode") { await OpenCodeGoQuota.read(status: &$0) }
-        let kimiBin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".kimi-code/bin").path
-        async let kimi = ProviderStatus.read("Kimi", executable: "kimi", extraPaths: [kimiBin]) {
-            await KimiQuota.read(status: &$0)
+        let kimi = Task {
+            await ProviderStatus.read("Kimi", executable: "kimi", extraPaths: KimiQuota.extraPaths) {
+                await KimiQuota.read(status: &$0)
+            }
         }
+        kimiRefresh = kimi
+        let (kimiResult, kimiStatus) = await kimi.value
+        kimiRefresh = nil
         let ((codexResult, codexStatus), (antigravityResult, antigravityStatus),
-             (claudeResult, claudeStatus), (grokResult, grokStatus),
-             (openCodeGoResult, openCodeGoStatus), (kimiResult, kimiStatus)) =
-            await (codex, antigravity, claude, grok, openCodeGo, kimi)
+             (claudeResult, claudeStatus), (grokResult, grokStatus), (openCodeGoResult, openCodeGoStatus)) =
+            await (codex, antigravity, claude, grok, openCodeGo)
         guard !Task.isCancelled, !state.fullDemo else { return }
         switch codexResult {
         case .success(let quota):
@@ -723,6 +729,17 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
         state.grokSnapshot.update(grokResult, status: grokStatus)
         state.openCodeGoSnapshot.update(openCodeGoResult, status: openCodeGoStatus)
         state.kimiSnapshot.update(kimiResult, status: kimiStatus)
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if terminating { return .terminateLater }
+        terminating = true
+        quotaPolling.stop()
+        kimiRefresh?.cancel()
+        let waiting = KimiQuota.deferTermination(until: kimiRefresh) {
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return waiting ? .terminateLater : .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -740,6 +757,9 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
 enum QuotaRailApp {
     @MainActor
     static func main() {
+        if CommandLine.arguments.dropFirst().first == KimiQuota.helperFlag {
+            KimiQuota.handleHelper(CommandLine.arguments)
+        }
         AntigravityQuota.handleStatusLineCallback()
         if CommandLine.arguments.contains("--export-contour") {
             print(OverlayGeometry.drawing())
