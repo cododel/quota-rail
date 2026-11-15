@@ -37,6 +37,9 @@ copying tokens into this document. The following safeguards protect those intera
   not determine eligibility for display. A failed refresh retains the last successful snapshot in memory and marks it
   stale until refreshed. Clear it when the CLI is removed or the provider explicitly
   reports lost authorization or an API-only profile. Persist visibility choices separately.
+- Read live quotas when the rail begins expanding, then every minute while expanded.
+  Reopening during the cooldown waits until the next eligible refresh. Collapsing
+  cancels the scheduled refresh and lets any in-progress refresh finish.
 - Preserve all available quota windows and banked-reset expirations for details. Expose
   credits only when supported, and distinguish an approximate conversion from cash value.
 - Antigravity is one subscription with Gemini and Claude/GPT groups, each with 5h and

@@ -3,6 +3,54 @@ import SwiftUI
 
 @main
 struct SubscriptionsCheck {
+    @MainActor
+    private static func checkQuotaPolling() async {
+        let clock = ContinuousClock()
+        let interval = Duration.milliseconds(100)
+        var starts: [ContinuousClock.Instant] = []
+        var firstRefresh: CheckedContinuation<Void, Never>?
+        let polling = QuotaPolling(interval: interval) {
+            starts.append(clock.now)
+            if starts.count == 1 {
+                await withCheckedContinuation { firstRefresh = $0 }
+            }
+        }
+        defer { polling.stop() }
+
+        func waitForStarts(_ count: Int) async {
+            let deadline = clock.now.advanced(by: .seconds(2))
+            while starts.count < count && clock.now < deadline {
+                try! await Task.sleep(for: .milliseconds(5))
+            }
+            precondition(starts.count == count)
+        }
+
+        try! await Task.sleep(for: interval)
+        precondition(starts.isEmpty, "The rail starts hidden")
+        polling.setActive(true)
+        await waitForStarts(1)
+        polling.setActive(false)
+        polling.setActive(true)
+        polling.setActive(false)
+        let completed = clock.now
+        firstRefresh?.resume()
+        try! await Task.sleep(for: interval + interval)
+        precondition(starts.count == 1, "A hidden rail does not poll after a refresh finishes")
+
+        polling.setActive(true)
+        await waitForStarts(2)
+        precondition(starts[1] >= completed.advanced(by: interval))
+        polling.setActive(false)
+        polling.setActive(true)
+        await waitForStarts(3)
+        precondition(starts[2] >= starts[1].advanced(by: interval), "Reopening keeps the cooldown")
+        await waitForStarts(4)
+        precondition(starts[3] >= starts[2].advanced(by: interval), "An open rail keeps polling")
+        polling.setActive(false)
+        try! await Task.sleep(for: interval + interval)
+        precondition(starts.count == 4, "Collapsing cancels the scheduled refresh")
+    }
+
     static func main() async {
         AntigravityQuota.handleStatusLineCallback()
         let arguments = CommandLine.arguments
@@ -12,6 +60,7 @@ struct SubscriptionsCheck {
             print(quota.gemini.remaining, quota.thirdParty.remaining)
             return
         }
+        await checkQuotaPolling()
         let visibleOrder = OverlaySubscription.moving("grok", to: 0, in: ["codex", "gemini", "grok"])
         precondition(visibleOrder == ["grok", "codex", "gemini"])
         precondition(OverlaySubscription.moving("grok", to: 2, in: visibleOrder) == ["codex", "gemini", "grok"])

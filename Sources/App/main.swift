@@ -150,7 +150,10 @@ final class OverlayState: ObservableObject {
     let releaseUpdates = ReleaseUpdates()
     @Published var codexSnapshot = ProviderQuotaSnapshot<CodexQuota>()
     @Published var quotaStatus = "Checking Codex quota…"
-    @Published var expanded = false
+    @Published var expanded = false {
+        didSet { quotaVisibilityChanged?() }
+    }
+    var quotaVisibilityChanged: (() -> Void)?
     @Published var selectedSubscription: String?
     @Published var claudeSnapshot = ProviderQuotaSnapshot<CodexQuota>()
     var providerStatuses: [ProviderStatus] {
@@ -184,10 +187,9 @@ final class OverlayState: ObservableObject {
             if showsDemoSettings {
                 UserDefaults.standard.set(fullDemo, forKey: "quotaRail.overlay.fullDemo")
             }
-            nextQuotaRefresh = .distantPast
+            quotaVisibilityChanged?()
         }
     }
-    var nextQuotaRefresh = Date.distantPast
     private let demoStart = Date()
     private static let hiddenSubscriptionsKey = "quotaRail.overlay.hiddenSubscriptions"
     @Published private var hiddenSubscriptions = Set(
@@ -642,7 +644,9 @@ struct Overlay: View {
 @MainActor
 final class OverlayDelegate: NSObject, NSApplicationDelegate {
     private var panel: NSPanel?
-    private var quotaTask: Task<Void, Never>?
+    private lazy var quotaPolling = QuotaPolling { [weak self] in
+        await self?.refreshQuotas()
+    }
     private var outsideClickMonitor: Any?
     private let state = OverlayState()
 
@@ -674,55 +678,51 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
                 state.selectedSubscription = nil
             }
         }
-        quotaTask = Task { [state] in
-            while !Task.isCancelled {
-                if !state.fullDemo && Date() >= state.nextQuotaRefresh {
-                    async let codex = Task.detached(priority: .utility) {
-                        var status = ProviderStatus("Codex", executable: "codex")
-                        let result = CodexQuota.read(status: &status)
-                        if case .failure(.apiProfile) = result { status.authorization = "API profile" }
-                        return (result, status)
-                    }.value
-                    async let antigravity = Task.detached(priority: .utility) {
-                        await ProviderStatus.read("Antigravity", executable: "agy") { _ in AntigravityQuota.read() }
-                    }.value
-                    async let claude = Task.detached(priority: .utility) {
-                        await ProviderStatus.read("Claude", executable: "claude") { await ClaudeQuota.read(status: &$0) }
-                    }.value
-                    let grokPreviouslyRejected = state.grokSnapshot.status?.authorization == "Credentials rejected"
-                    async let grok = ProviderStatus.read("Grok Build", executable: "grok") {
-                        await GrokQuota.read(status: &$0, previouslyRejected: grokPreviouslyRejected)
-                    }
-                    async let openCodeGo = ProviderStatus.read("OpenCode Go", executable: "opencode") { await OpenCodeGoQuota.read(status: &$0) }
-                    let kimiBin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".kimi-code/bin").path
-                    async let kimi = ProviderStatus.read("Kimi", executable: "kimi", extraPaths: [kimiBin]) {
-                        await KimiQuota.read(status: &$0)
-                    }
-                    let ((codexResult, codexStatus), (antigravityResult, antigravityStatus),
-                         (claudeResult, claudeStatus), (grokResult, grokStatus),
-                         (openCodeGoResult, openCodeGoStatus), (kimiResult, kimiStatus)) =
-                        await (codex, antigravity, claude, grok, openCodeGo, kimi)
-                    guard !Task.isCancelled else { return }
-                    if !state.fullDemo {
-                        switch codexResult {
-                        case .success(let quota):
-                            state.quotaStatus = "\(quota.label) · \(quota.remaining)% remaining"
-                        case .failure(let error):
-                            state.quotaStatus = error.rawValue
-                        }
-                        state.codexSnapshot.update(try? codexResult.get(), status: codexStatus)
-                        state.antigravitySnapshot.update(antigravityResult, status: antigravityStatus)
-                        state.claudeSnapshot.update(claudeResult, status: claudeStatus)
-                        state.grokSnapshot.update(grokResult, status: grokStatus)
-                        state.openCodeGoSnapshot.update(openCodeGoResult, status: openCodeGoStatus)
-                        state.kimiSnapshot.update(kimiResult, status: kimiStatus)
-                        state.nextQuotaRefresh = Date().addingTimeInterval(60)
-                    }
-                }
-                do { try await Task.sleep(for: .milliseconds(250)) }
-                catch { return }
-            }
+        state.quotaVisibilityChanged = { [weak self] in
+            guard let self else { return }
+            quotaPolling.setActive(state.expanded && !state.fullDemo)
         }
+    }
+
+    private func refreshQuotas() async {
+        async let codex = Task.detached(priority: .utility) {
+            var status = ProviderStatus("Codex", executable: "codex")
+            let result = CodexQuota.read(status: &status)
+            if case .failure(.apiProfile) = result { status.authorization = "API profile" }
+            return (result, status)
+        }.value
+        async let antigravity = Task.detached(priority: .utility) {
+            await ProviderStatus.read("Antigravity", executable: "agy") { _ in AntigravityQuota.read() }
+        }.value
+        async let claude = Task.detached(priority: .utility) {
+            await ProviderStatus.read("Claude", executable: "claude") { await ClaudeQuota.read(status: &$0) }
+        }.value
+        let grokPreviouslyRejected = state.grokSnapshot.status?.authorization == "Credentials rejected"
+        async let grok = ProviderStatus.read("Grok Build", executable: "grok") {
+            await GrokQuota.read(status: &$0, previouslyRejected: grokPreviouslyRejected)
+        }
+        async let openCodeGo = ProviderStatus.read("OpenCode Go", executable: "opencode") { await OpenCodeGoQuota.read(status: &$0) }
+        let kimiBin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".kimi-code/bin").path
+        async let kimi = ProviderStatus.read("Kimi", executable: "kimi", extraPaths: [kimiBin]) {
+            await KimiQuota.read(status: &$0)
+        }
+        let ((codexResult, codexStatus), (antigravityResult, antigravityStatus),
+             (claudeResult, claudeStatus), (grokResult, grokStatus),
+             (openCodeGoResult, openCodeGoStatus), (kimiResult, kimiStatus)) =
+            await (codex, antigravity, claude, grok, openCodeGo, kimi)
+        guard !Task.isCancelled, !state.fullDemo else { return }
+        switch codexResult {
+        case .success(let quota):
+            state.quotaStatus = "\(quota.label) · \(quota.remaining)% remaining"
+        case .failure(let error):
+            state.quotaStatus = error.rawValue
+        }
+        state.codexSnapshot.update(try? codexResult.get(), status: codexStatus)
+        state.antigravitySnapshot.update(antigravityResult, status: antigravityStatus)
+        state.claudeSnapshot.update(claudeResult, status: claudeStatus)
+        state.grokSnapshot.update(grokResult, status: grokStatus)
+        state.openCodeGoSnapshot.update(openCodeGoResult, status: openCodeGoStatus)
+        state.kimiSnapshot.update(kimiResult, status: kimiStatus)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -730,7 +730,7 @@ final class OverlayDelegate: NSObject, NSApplicationDelegate {
             NSEvent.removeMonitor(outsideClickMonitor)
             self.outsideClickMonitor = nil
         }
-        quotaTask?.cancel()
+        quotaPolling.stop()
         state.closeTask?.cancel()
         state.settingsHoverTask?.cancel()
     }
